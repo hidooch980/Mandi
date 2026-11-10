@@ -1,0 +1,60 @@
+plugins {
+    id 'com.android.application'
+}
+
+def versionProps = new Properties()
+def versionPropsFile = rootProject.file('version.properties')
+if (versionPropsFile.exists()) {
+    versionPropsFile.withInputStream { versionProps.load(it) }
+}
+
+def keystoreProps = new Properties()
+def keystorePropsFile = rootProject.file('keystore.properties')
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
+android {
+    namespace 'ir.petronabz.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'ir.petronabz.app'
+        minSdk 24
+        targetSdk 35
+        versionCode((versionProps['VERSION_CODE'] ?: '1').toInteger())
+        versionName(versionProps['VERSION_NAME'] ?: '1.0.0')
+        buildConfigField 'String', 'DEFAULT_SERVER_URL', '"http://192.168.100.60:3000"'
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    signingConfigs {
+        release {
+            if (keystorePropsFile.exists()) {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            signingConfig signingConfigs.release
+        }
+        debug {
+            applicationIdSuffix '.debug'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "پترونبض | سامانه کشف قیمت و فروش بشکه‌ای گازوئیل",
+  "short_name": "پترونبض",
+  "description": "سامانه جامع کشف قیمت چندمنبعی، مدیریت انبار بشکه، صدور پیش‌فاکتور و ثبت سفارش آنلاین گازوئیل روی همه پلتفرم‌ها",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "dir": "rtl",
+  "lang": "fa",
+  "background_color": "#0b1120",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
