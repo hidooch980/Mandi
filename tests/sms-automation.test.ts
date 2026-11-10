@@ -15,7 +15,7 @@ test("hourly SMS dispatch queues inquiries for selected targets and inbound repl
   );
 
   // Trigger initial seed and verify default sms_config
-  const smsCfg = getSmsConfig();
+  const smsCfg = await getSmsConfig();
   assert.equal(smsCfg.intervalMinutes, 60);
   assert.ok(smsCfg.gatewaySecret.length >= 12);
 
@@ -24,13 +24,13 @@ test("hourly SMS dispatch queues inquiries for selected targets and inbound repl
   assert.equal(dispatchResult.ran, true);
   assert.equal(dispatchResult.queuedCount, 3);
 
-  const outboundLogs = listSmsLogs(10);
+  const outboundLogs = await listSmsLogs(10);
   assert.equal(outboundLogs.length, 3);
   assert.equal(outboundLogs[0].direction, "OUTBOUND");
   assert.equal(outboundLogs[0].status, "QUEUED");
 
   // Simulate inbound SMS reply from broker Ali (09151112233) with a cheaper price 36,700,000
-  const replyOutcome = processInboundSmsReply({
+  const replyOutcome = await processInboundSmsReply({
     fromPhone: "+98 915 111 2233",
     message: "سلام گازوئیل بشکه امروز ۳۶ و ۷۰۰ تحویل انبار",
   });
@@ -41,6 +41,7 @@ test("hourly SMS dispatch queues inquiries for selected targets and inbound repl
   assert.equal(replyOutcome.summary.bestBuy?.landedPerBarrelToman, 36700000);
 
   // Clean up test DB
-  getDb().close();
+  const db = await getDb();
+  await db.close();
   fs.rmSync(tempDir, { recursive: true, force: true });
 });

@@ -18,24 +18,26 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => ({}))) as {
       customBarrelPriceToman?: number;
     };
-    const summary = getDieselDiscoverySummary();
+    const summary = await getDieselDiscoverySummary();
 
     const finalPrice =
       body.customBarrelPriceToman && body.customBarrelPriceToman > 0
         ? roundToThousand(Number(body.customBarrelPriceToman))
         : summary.suggestedSellPerBarrelToman;
 
-    const db = getDb();
-    db.prepare(
-      `UPDATE market_config SET published_diesel_barrel_toman = ?, updated_at = ? WHERE id = 1`
-    ).run(finalPrice, new Date().toISOString());
+    const db = await getDb();
+    await db.run(
+      `UPDATE market_config SET published_diesel_barrel_toman = ?, updated_at = ? WHERE id = 1`,
+      finalPrice,
+      new Date().toISOString()
+    );
 
-    snapshotDieselHistory();
+    await snapshotDieselHistory();
 
     return NextResponse.json({
       ok: true,
       publishedPrice: finalPrice,
-      state: getFullDiscoveryState(),
+      state: await getFullDiscoveryState(),
     });
   } catch (err) {
     return jsonError(

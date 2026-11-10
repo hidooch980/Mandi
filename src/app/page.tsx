@@ -20,9 +20,11 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const user = await getCurrentUser();
-  const config = getMarketConfig();
-  const dieselSummary = getDieselDiscoverySummary(config);
-  const products = listProductsWithPricing(true);
+  const config = await getMarketConfig();
+  const [dieselSummary, products] = await Promise.all([
+    getDieselDiscoverySummary(config),
+    listProductsWithPricing(true),
+  ]);
 
   const dashboardHref = user
     ? isStaffRole(user.role)
@@ -63,7 +65,7 @@ export default async function HomePage() {
           <div className="lg:col-span-7 space-y-6">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium">
               <Smartphone className="w-4 h-4" />
-              <span>اجرای رایگان روی ویندوز، مک، اندروید و آیفون بدون نیاز به هاست و دامین</span>
+              <span>دسترسی آنلاین ۲۴ ساعته روی اندروید، آیفون، ویندوز و مک</span>
             </div>
 
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white leading-tight">
@@ -110,7 +112,7 @@ export default async function HomePage() {
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>اجرای رایگان روی وای‌فای و اینترنت</span>
+                <span>نصب وب‌اپ آیفون و اپلیکیشن اندروید</span>
               </div>
             </div>
           </div>
@@ -207,12 +209,12 @@ export default async function HomePage() {
             {
               icon: ShieldCheck,
               title: "بدون ثبت‌نام مشتری",
-              desc: "محیط اختصاصی مدیر و همکار فروش با ذخیره تمام سوابق در دیتابیس محلی سیستم خودتان.",
+              desc: "محیط اختصاصی مدیر و همکار فروش با ذخیره امن تمام سوابق معاملات و مشتریان در دیتابیس سامانه.",
             },
             {
               icon: Laptop,
-              title: "بدون نیاز به هاست و دامین",
-              desc: "اجرای رایگان روی وای‌فای برای آیفون، اندروید و لپ‌تاپ یا با لینک امن رایگان Cloudflare Tunnel.",
+              title: "اپلیکیشن اندروید و وب‌اپ آیفون",
+              desc: "نسخه APK اختصاصی و قابل بروزرسانی برای اندروید، وب‌اپ برای Safari آیفون و نصب دسکتاپ روی کامپیوتر.",
             },
           ].map((feat) => {
             const Icon = feat.icon;

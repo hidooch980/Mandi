@@ -16,3 +16,4 @@ android/keystore.properties
 *.keystore
 release/*.apk
 public/downloads/*.apk
+!public/downloads/petronabz-latest.apk

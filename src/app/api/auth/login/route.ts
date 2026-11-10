@@ -22,12 +22,12 @@ export async function POST(req: Request) {
       return jsonError("شماره موبایل یا ایمیل و رمز عبور الزامی است.", 400);
     }
 
-    const db = getDb();
-    const row = db
-      .prepare(
-        "SELECT * FROM users WHERE (phone = ? OR lower(email) = lower(?)) AND is_active = 1 LIMIT 1"
-      )
-      .get(identifier, identifier) as Record<string, unknown> | undefined;
+    const db = await getDb();
+    const row = await db.get<Record<string, unknown>>(
+      "SELECT * FROM users WHERE (phone = ? OR lower(email) = lower(?)) AND is_active = 1 LIMIT 1",
+      identifier,
+      identifier
+    );
 
     if (!row || !verifyPassword(password, String(row.password_hash))) {
       return jsonError("اطلاعات ورود صحیح نیست.", 401);

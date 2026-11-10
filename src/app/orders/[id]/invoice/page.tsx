@@ -20,7 +20,7 @@ export default async function InvoicePage({
   if (!user) redirect("/login");
 
   const { id } = await params;
-  const order = getOrderById(Number(id));
+  const order = await getOrderById(Number(id));
   if (!order) notFound();
 
   const staff = isStaffRole(user.role);
@@ -28,7 +28,7 @@ export default async function InvoicePage({
     redirect("/portal");
   }
 
-  const config = getMarketConfig();
+  const config = await getMarketConfig();
   const totalUsd = order.totalToman / Math.max(order.usdRateSnapshot, 1);
   const isPurchase = order.tradeType === "PURCHASE";
 

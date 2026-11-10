@@ -7,15 +7,16 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const db = getDb();
+    const db = await getDb();
     ensureSmsSchedulerStarted();
-    const row = db.prepare("SELECT COUNT(*) AS cnt FROM products").get() as {
-      cnt: number;
-    };
+    const row = await db.get<{ cnt: number | string }>(
+      "SELECT COUNT(*) AS cnt FROM products"
+    );
     return NextResponse.json({
       ok: true,
       service: "petronabz-pwa",
-      productsCount: row.cnt,
+      dialect: db.dialect,
+      productsCount: Number(row?.cnt ?? 0),
       timestamp: new Date().toISOString(),
     });
   } catch (err) {

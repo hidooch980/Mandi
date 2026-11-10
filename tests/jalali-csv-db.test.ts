@@ -31,12 +31,33 @@ test("password hashing and verification work with scrypt", () => {
   assert.equal(verifyPassword("WrongPassword", hash), false);
 });
 
+test("convertSqlToPg translates ? placeholders cleanly without touching string literals", async () => {
+  const { convertSqlToPg } = await import("../src/lib/db.ts");
+
+  assert.equal(
+    convertSqlToPg("SELECT * FROM users WHERE phone = ? AND role = ?"),
+    "SELECT * FROM users WHERE phone = $1 AND role = $2"
+  );
+  assert.equal(
+    convertSqlToPg("SELECT 'قیمت چند است؟' AS msg, id FROM sms_logs WHERE status = ?"),
+    "SELECT 'قیمت چند است؟' AS msg, id FROM sms_logs WHERE status = $1"
+  );
+  assert.equal(
+    convertSqlToPg(
+      "INSERT INTO users (name, phone) VALUES (?, ?);",
+      true
+    ),
+    "INSERT INTO users (name, phone) VALUES ($1, $2) RETURNING id"
+  );
+});
+
 test("SQLite db initializes 37M/37.5M Diesel, 8M/9M 70L Gasoline, and broker/WhatsApp sources", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "petronabz-test-"));
   const tempDb = path.join(tempDir, "test.db");
   process.env.PETRONABZ_DB_PATH = tempDb;
 
   const {
+    getDb,
     getMarketConfig,
     listBuyersWithStats,
     listOrders,
@@ -47,39 +68,39 @@ test("SQLite db initializes 37M/37.5M Diesel, 8M/9M 70L Gasoline, and broker/Wha
     "../src/lib/services.ts"
   );
 
-  const config = getMarketConfig();
+  const config = await getMarketConfig();
   assert.equal(config.publishedDieselBarrelToman, 37500000);
   assert.equal(config.publishedGasolineBarrelToman, 9000000);
 
-  const sources = listPriceSources();
+  const sources = await listPriceSources();
   assert.ok(sources.some((s) => s.type === "BROKER_PHONE"));
   assert.ok(sources.some((s) => s.type === "WHATSAPP"));
 
-  const summary = getDieselDiscoverySummary();
+  const summary = await getDieselDiscoverySummary();
   assert.equal(summary.fuelType, "DIESEL");
   assert.ok(summary.quoteCount >= 5);
   assert.ok(summary.bestBuy !== null);
 
-  const products = listProductsWithPricing(true);
+  const products = await listProductsWithPricing(true);
   const gas70 = products.find((p) => p.fuelType === "GASOLINE");
   assert.ok(gas70);
   assert.equal(gas70.barrelLiters, 70);
   assert.equal(gas70.lastCostPerBarrelToman, 8000000);
   assert.equal(gas70.effectivePricePerBarrelToman, 9000000);
 
-  const orders = listOrders();
+  const orders = await listOrders();
   assert.ok(orders.some((o) => o.tradeType === "SALE" && o.estimatedProfitToman === 500000));
   assert.ok(orders.some((o) => o.tradeType === "SALE" && o.estimatedProfitToman === 1000000));
 
-  const buyers = listBuyersWithStats();
+  const buyers = await listBuyersWithStats();
   assert.ok(buyers.length >= 2);
   assert.ok(buyers.some((b) => b.totalSpentToman === 37500000));
 
-  const sellers = listSellersWithStats();
+  const sellers = await listSellersWithStats();
   assert.ok(sellers.length >= 5);
   assert.ok(sellers.some((s) => s.totalPurchasedToman >= 37000000));
 
-  const { getDb } = await import("../src/lib/db.ts");
-  getDb().close();
+  const db = await getDb();
+  await db.close();
   fs.rmSync(tempDir, { recursive: true, force: true });
 });

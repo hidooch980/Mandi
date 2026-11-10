@@ -50,7 +50,7 @@ export async function dispatchHourlySmsInquiries(options?: {
   reason?: string;
 }> {
   const force = options?.force ?? false;
-  const config = getSmsConfig();
+  const config = await getSmsConfig();
 
   if (!force && !config.isEnabled) {
     return { ran: false, queuedCount: 0, sentCount: 0, failedCount: 0, reason: "غیرفعال" };
@@ -70,8 +70,8 @@ export async function dispatchHourlySmsInquiries(options?: {
     }
   }
 
-  const db = getDb();
-  const sources = listPriceSources().filter(
+  const db = await getDb();
+  const sources = (await listPriceSources()).filter(
     (s) => s.isActive && s.isSmsTarget && normalizeIranPhone(s.contactInfo).length >= 10
   );
 
@@ -84,11 +84,11 @@ export async function dispatchHourlySmsInquiries(options?: {
   let sentCount = 0;
   let failedCount = 0;
 
-  const insertLog = db.prepare(`
+  const insertLogSql = `
     INSERT INTO sms_logs (
       direction, source_id, source_name, phone, message, status, extracted_price_toman, created_at
     ) VALUES ('OUTBOUND', ?, ?, ?, ?, ?, NULL, ?)
-  `);
+  `;
 
   const hasGateway =
     config.androidGatewayUrl.trim().length > 0 &&
@@ -115,43 +115,48 @@ export async function dispatchHourlySmsInquiries(options?: {
         });
         clearTimeout(timer);
         if (resp.ok) {
-          insertLog.run(src.id, src.name, phone, message, "SENT", nowIso);
+          await db.run(insertLogSql, src.id, src.name, phone, message, "SENT", nowIso);
           sentCount += 1;
         } else {
-          insertLog.run(src.id, src.name, phone, message, "FAILED", nowIso);
+          await db.run(insertLogSql, src.id, src.name, phone, message, "FAILED", nowIso);
           failedCount += 1;
         }
       } catch {
-        insertLog.run(src.id, src.name, phone, message, "FAILED", nowIso);
+        await db.run(insertLogSql, src.id, src.name, phone, message, "FAILED", nowIso);
         failedCount += 1;
       }
     } else {
-      insertLog.run(src.id, src.name, phone, message, "QUEUED", nowIso);
+      await db.run(insertLogSql, src.id, src.name, phone, message, "QUEUED", nowIso);
       queuedCount += 1;
     }
   }
 
-  db.prepare(
-    "UPDATE sms_config SET last_run_at = ?, next_run_at = ?, updated_at = ? WHERE id = 1"
-  ).run(nowIso, nextIso, nowIso);
+  await db.run(
+    "UPDATE sms_config SET last_run_at = ?, next_run_at = ?, updated_at = ? WHERE id = 1",
+    nowIso,
+    nextIso,
+    nowIso
+  );
 
   return { ran: true, queuedCount, sentCount, failedCount };
 }
 
-export function processInboundSmsReply(params: {
+export async function processInboundSmsReply(params: {
   fromPhone: string;
   message: string;
 }) {
-  const db = getDb();
-  const smsConfig = getSmsConfig();
-  const marketConfig = getMarketConfig();
+  const db = await getDb();
+  const [smsConfig, marketConfig, sources] = await Promise.all([
+    getSmsConfig(),
+    getMarketConfig(),
+    listPriceSources(),
+  ]);
   const nowIso = new Date().toISOString();
 
   const normalizedPhone = normalizeIranPhone(params.fromPhone);
   const parsed = parseSmartMessage(params.message);
   const effectivePhone = normalizedPhone || parsed.phone || params.fromPhone.trim();
 
-  const sources = listPriceSources();
   let matched = sources.find((s) => {
     const srcPhone = normalizeIranPhone(s.contactInfo);
     return srcPhone.length >= 10 && srcPhone === effectivePhone;
@@ -161,20 +166,17 @@ export function processInboundSmsReply(params: {
     if (!matched) {
       const newName =
         parsed.suggestedSourceName || `دلال پیامکی (${effectivePhone || "ناشناس"})`;
-      const created = db
-        .prepare(
-          `INSERT INTO price_sources (
-            name, code, type, city, contact_info, api_url, confidence_weight,
-            default_freight_per_barrel_toman, is_active, is_sms_target, created_at
-          ) VALUES (?, ?, 'BROKER_PHONE', ?, ?, '', 85, 0, 1, 1, ?)`
-        )
-        .run(
-          newName,
-          `SMS-${Date.now().toString().slice(-6)}`,
-          parsed.city || "استعلام پیامکی",
-          effectivePhone,
-          nowIso
-        );
+      const created = await db.run(
+        `INSERT INTO price_sources (
+          name, code, type, city, contact_info, api_url, confidence_weight,
+          default_freight_per_barrel_toman, is_active, is_sms_target, created_at
+        ) VALUES (?, ?, 'BROKER_PHONE', ?, ?, '', 85, 0, 1, 1, ?)`,
+        newName,
+        `SMS-${Date.now().toString().slice(-6)}`,
+        parsed.city || "استعلام پیامکی",
+        effectivePhone,
+        nowIso
+      );
       matched = {
         id: Number(created.lastInsertRowid),
         name: newName,
@@ -191,13 +193,12 @@ export function processInboundSmsReply(params: {
       };
     }
 
-    db.prepare(
+    await db.run(
       `INSERT INTO price_quotes (
         source_id, fuel_type, raw_price, currency, unit, barrel_liters, density,
         includes_barrel, freight_per_barrel_toman, available_barrels, notes,
         recorded_by, recorded_at
-      ) VALUES (?, 'DIESEL', ?, ?, ?, ?, ?, 1, ?, ?, ?, 'پاسخ پیامک خودکار', ?)`
-    ).run(
+      ) VALUES (?, 'DIESEL', ?, ?, ?, ?, ?, 1, ?, ?, ?, 'پاسخ پیامک خودکار', ?)`,
       matched.id,
       parsed.priceToman,
       parsed.currency,
@@ -211,19 +212,20 @@ export function processInboundSmsReply(params: {
     );
 
     if (smsConfig.autoDiscoverOnReply) {
-      const updatedSummary = getDieselDiscoverySummary();
-      db.prepare(
-        "UPDATE market_config SET published_diesel_barrel_toman = ?, updated_at = ? WHERE id = 1"
-      ).run(updatedSummary.suggestedSellPerBarrelToman, nowIso);
+      const updatedSummary = await getDieselDiscoverySummary();
+      await db.run(
+        "UPDATE market_config SET published_diesel_barrel_toman = ?, updated_at = ? WHERE id = 1",
+        updatedSummary.suggestedSellPerBarrelToman,
+        nowIso
+      );
     }
 
-    snapshotDieselHistory();
+    await snapshotDieselHistory();
 
-    db.prepare(
+    await db.run(
       `INSERT INTO sms_logs (
         direction, source_id, source_name, phone, message, status, extracted_price_toman, created_at
-      ) VALUES ('INBOUND', ?, ?, ?, ?, 'DISCOVERED', ?, ?)`
-    ).run(
+      ) VALUES ('INBOUND', ?, ?, ?, ?, 'DISCOVERED', ?, ?)`,
       matched.id,
       matched.name,
       effectivePhone,
@@ -237,15 +239,14 @@ export function processInboundSmsReply(params: {
       status: "DISCOVERED" as const,
       matchedSourceName: matched.name,
       extractedPriceToman: parsed.priceToman,
-      summary: getDieselDiscoverySummary(),
+      summary: await getDieselDiscoverySummary(),
     };
   }
 
-  db.prepare(
+  await db.run(
     `INSERT INTO sms_logs (
       direction, source_id, source_name, phone, message, status, extracted_price_toman, created_at
-    ) VALUES ('INBOUND', ?, ?, ?, ?, 'UNPARSED', NULL, ?)`
-  ).run(
+    ) VALUES ('INBOUND', ?, ?, ?, ?, 'UNPARSED', NULL, ?)`,
     matched?.id ?? null,
     matched?.name ?? "شماره ناشناس",
     effectivePhone,
@@ -258,11 +259,12 @@ export function processInboundSmsReply(params: {
     status: "UNPARSED" as const,
     matchedSourceName: matched?.name ?? "شماره ناشناس",
     extractedPriceToman: null,
-    summary: getDieselDiscoverySummary(),
+    summary: await getDieselDiscoverySummary(),
   };
 }
 
 export function ensureSmsSchedulerStarted(): void {
+  if (process.env.VERCEL) return;
   if (globalForScheduler.__petronabzSmsTimer) return;
   globalForScheduler.__petronabzSmsTimer = setInterval(() => {
     dispatchHourlySmsInquiries({ force: false }).catch(() => {});

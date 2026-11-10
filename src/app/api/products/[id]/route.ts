@@ -27,13 +27,14 @@ export async function PATCH(
       minOrderBarrels: number;
     }>;
 
-    const db = getDb();
-    const row = db
-      .prepare("SELECT * FROM products WHERE id = ?")
-      .get(productId) as Record<string, unknown> | undefined;
+    const db = await getDb();
+    const row = await db.get<Record<string, unknown>>(
+      "SELECT * FROM products WHERE id = ?",
+      productId
+    );
     if (!row) return jsonError("محصول یافت نشد.", 404);
 
-    db.prepare(
+    await db.run(
       `UPDATE products SET
         stock_barrels = ?,
         pricing_mode = ?,
@@ -43,8 +44,7 @@ export async function PATCH(
         is_active = ?,
         min_order_barrels = ?,
         updated_at = ?
-      WHERE id = ?`
-    ).run(
+      WHERE id = ?`,
       body.stockBarrels !== undefined
         ? Math.max(Math.floor(Number(body.stockBarrels)), 0)
         : Number(row.stock_barrels),
@@ -68,7 +68,7 @@ export async function PATCH(
 
     return NextResponse.json({
       ok: true,
-      products: listProductsWithPricing(false),
+      products: await listProductsWithPricing(false),
     });
   } catch (err) {
     return jsonError(

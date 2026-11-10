@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const secret =
     searchParams.get("secret") || req.headers.get("x-sms-secret");
-  const cfg = getSmsConfig();
+  const cfg = await getSmsConfig();
 
   if (!isValidSecret(secret, cfg.gatewaySecret)) {
     return jsonError("کلید امنیتی پیامک معتبر نیست.", 401);
@@ -35,28 +35,26 @@ export async function GET(req: Request) {
   // Trigger due hourly cycle if scheduler hasn't ticked yet
   await dispatchHourlySmsInquiries({ force: false });
 
-  const db = getDb();
-  const jobs = db
-    .prepare(
-      "SELECT id, source_name, phone, message, created_at FROM sms_logs WHERE direction = 'OUTBOUND' AND status = 'QUEUED' ORDER BY id ASC LIMIT 25"
-    )
-    .all() as {
+  const db = await getDb();
+  const jobs = await db.all<{
     id: number;
     source_name: string;
     phone: string;
     message: string;
     created_at: string;
-  }[];
+  }>(
+    "SELECT id, source_name, phone, message, created_at FROM sms_logs WHERE direction = 'OUTBOUND' AND status = 'QUEUED' ORDER BY id ASC LIMIT 25"
+  );
 
   return NextResponse.json({
     ok: true,
     managerPhone: cfg.managerPhone,
     jobs: jobs.map((j) => ({
-      id: j.id,
-      name: j.source_name,
-      phone: j.phone,
-      message: j.message,
-      createdAt: j.created_at,
+      id: Number(j.id),
+      name: String(j.source_name),
+      phone: String(j.phone),
+      message: String(j.message),
+      createdAt: String(j.created_at),
     })),
   });
 }
@@ -71,7 +69,7 @@ export async function POST(req: Request) {
       id?: number;
       status?: "SENT" | "FAILED";
     };
-    const cfg = getSmsConfig();
+    const cfg = await getSmsConfig();
     if (!isValidSecret(body.secret ?? req.headers.get("x-sms-secret"), cfg.gatewaySecret)) {
       return jsonError("کلید امنیتی پیامک معتبر نیست.", 401);
     }
@@ -80,10 +78,12 @@ export async function POST(req: Request) {
     if (!logId) return jsonError("شناسه پیامک الزامی است.", 400);
 
     const status = body.status === "FAILED" ? "FAILED" : "SENT";
-    const db = getDb();
-    db.prepare(
-      "UPDATE sms_logs SET status = ? WHERE id = ? AND direction = 'OUTBOUND'"
-    ).run(status, logId);
+    const db = await getDb();
+    await db.run(
+      "UPDATE sms_logs SET status = ? WHERE id = ? AND direction = 'OUTBOUND'",
+      status,
+      logId
+    );
 
     return NextResponse.json({ ok: true, id: logId, status });
   } catch (err) {

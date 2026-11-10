@@ -23,6 +23,21 @@ function getSigningSecret(): string {
   if (globalForAuth.__petronabzSecret) {
     return globalForAuth.__petronabzSecret;
   }
+
+  // On read-only serverless platforms (e.g. Vercel), derive stably from DB URL or env if AUTH_SECRET isn't set
+  const dbSeed =
+    process.env.POSTGRES_URL ||
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_PRISMA_URL;
+  if (process.env.VERCEL || dbSeed) {
+    const derived = crypto
+      .createHash("sha256")
+      .update(`petronabz-session:${dbSeed || "vercel"}`)
+      .digest("hex");
+    globalForAuth.__petronabzSecret = derived;
+    return derived;
+  }
+
   const secretPath = path.join(process.cwd(), "data", ".session-secret");
   try {
     if (fs.existsSync(secretPath)) {
@@ -102,10 +117,11 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
   const payload = verifySessionToken(token);
   if (!payload) return null;
 
-  const db = getDb();
-  const row = db
-    .prepare("SELECT * FROM users WHERE id = ? AND is_active = 1")
-    .get(payload.uid) as Record<string, unknown> | undefined;
+  const db = await getDb();
+  const row = await db.get<Record<string, unknown>>(
+    "SELECT * FROM users WHERE id = ? AND is_active = 1",
+    payload.uid
+  );
   if (!row) return null;
   return mapUserRow(row);
 }
@@ -116,6 +132,7 @@ export function buildSessionCookieOptions(token: string) {
     value: token,
     httpOnly: true,
     sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production" && Boolean(process.env.VERCEL),
     path: "/",
     maxAge: Math.floor(SESSION_TTL_MS / 1000),
   };

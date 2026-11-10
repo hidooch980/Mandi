@@ -13,8 +13,10 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
   if (!isStaffRole(user.role)) redirect("/portal");
 
-  const state = getFullDiscoveryState();
-  const orders = listOrders();
+  const [state, orders] = await Promise.all([
+    getFullDiscoveryState(),
+    listOrders(),
+  ]);
 
   return (
     <AppShell user={user} usdToToman={state.config.usdToToman}>

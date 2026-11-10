@@ -15,29 +15,31 @@ import type {
   TradeType,
 } from "./types";
 
-export function getDieselDiscoverySummary(
+export async function getDieselDiscoverySummary(
   configOverride?: MarketConfig
-): DieselDiscoverySummary {
-  const config = configOverride ?? getMarketConfig();
-  const quotes = listLatestPriceQuotes(false);
+): Promise<DieselDiscoverySummary> {
+  const [config, quotes] = await Promise.all([
+    configOverride ? Promise.resolve(configOverride) : getMarketConfig(),
+    listLatestPriceQuotes(false),
+  ]);
   return discoverDieselPricing(quotes, config);
 }
 
-export function listProductsWithPricing(activeOnly = false): Product[] {
-  const db = getDb();
-  const config = getMarketConfig();
-  const dieselSummary = getDieselDiscoverySummary(config);
+export async function listProductsWithPricing(
+  activeOnly = false
+): Promise<Product[]> {
+  const db = await getDb();
+  const config = await getMarketConfig();
+  const dieselSummary = await getDieselDiscoverySummary(config);
 
   const where = activeOnly ? "WHERE p.is_active = 1" : "";
-  const rows = db
-    .prepare(`
-      SELECT p.*, w.name AS warehouse_name, w.city AS warehouse_city
-      FROM products p
-      INNER JOIN warehouses w ON w.id = p.warehouse_id
-      ${where}
-      ORDER BY p.fuel_type ASC, p.id ASC
-    `)
-    .all() as Record<string, unknown>[];
+  const rows = await db.all<Record<string, unknown>>(`
+    SELECT p.*, w.name AS warehouse_name, w.city AS warehouse_city
+    FROM products p
+    INNER JOIN warehouses w ON w.id = p.warehouse_id
+    ${where}
+    ORDER BY p.fuel_type ASC, p.id ASC
+  `);
 
   const usdRate = Math.max(config.usdToToman, 1);
 
@@ -90,24 +92,25 @@ export function listProductsWithPricing(activeOnly = false): Product[] {
         (effectiveBarrelPrice / usdRate).toFixed(2)
       ),
       minOrderBarrels: Number(r.min_order_barrels),
-      isActive: Boolean(r.is_active),
+      isActive: Boolean(Number(r.is_active)),
       description: String(r.description),
       updatedAt: String(r.updated_at),
     };
   });
 }
 
-export function snapshotDieselHistory(): void {
-  const db = getDb();
-  const config = getMarketConfig();
-  const summary = getDieselDiscoverySummary(config);
+export async function snapshotDieselHistory(): Promise<void> {
+  const db = await getDb();
+  const config = await getMarketConfig();
+  const summary = await getDieselDiscoverySummary(config);
 
-  db.prepare(`
+  await db.run(
+    `
     INSERT INTO price_history (
       weighted_avg_barrel_toman, best_buy_barrel_toman,
       published_sell_barrel_toman, usd_to_toman, source_count, recorded_at
     ) VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
+    `,
     summary.weightedAvgPerBarrelToman || summary.publishedSellPerBarrelToman,
     summary.bestBuy?.landedPerBarrelToman ?? summary.publishedSellPerBarrelToman,
     summary.publishedSellPerBarrelToman,
@@ -117,23 +120,27 @@ export function snapshotDieselHistory(): void {
   );
 }
 
-export function generateNextOrderNumber(tradeType: TradeType = "SALE"): string {
-  const db = getDb();
-  const row = db
-    .prepare("SELECT COALESCE(MAX(id), 0) AS max_id FROM orders")
-    .get() as { max_id: number };
-  const seq = 1001 + Number(row.max_id);
+export async function generateNextOrderNumber(
+  tradeType: TradeType = "SALE"
+): Promise<string> {
+  const db = await getDb();
+  const row = await db.get<{ max_id: number | string }>(
+    "SELECT COALESCE(MAX(id), 0) AS max_id FROM orders"
+  );
+  const seq = 1001 + Number(row?.max_id ?? 0);
   const prefix = tradeType === "PURCHASE" ? "PO" : "PN";
   return `${prefix}-1405-${seq}`;
 }
 
-export function getFullDiscoveryState() {
-  const config = getMarketConfig();
-  const sources = listPriceSources();
-  const summary = getDieselDiscoverySummary(config);
-  const history = listPriceHistory(20);
-  const warehouses = listWarehouses();
-  const products = listProductsWithPricing(false);
+export async function getFullDiscoveryState() {
+  const config = await getMarketConfig();
+  const [sources, summary, history, warehouses, products] = await Promise.all([
+    listPriceSources(),
+    getDieselDiscoverySummary(config),
+    listPriceHistory(20),
+    listWarehouses(),
+    listProductsWithPricing(false),
+  ]);
 
   return {
     config,

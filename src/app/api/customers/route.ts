@@ -14,8 +14,10 @@ export async function GET() {
   const auth = await requireStaffUser();
   if (auth.response) return auth.response;
 
-  const buyers = listBuyersWithStats();
-  const sellers = listSellersWithStats();
+  const [buyers, sellers] = await Promise.all([
+    listBuyersWithStats(),
+    listSellersWithStats(),
+  ]);
 
   return NextResponse.json({
     ok: true,
@@ -45,32 +47,34 @@ export async function POST(req: Request) {
       return jsonError("نام و شماره تماس خریدار الزامی است.", 400);
     }
 
-    const db = getDb();
-    const exists = db.prepare("SELECT id FROM users WHERE phone = ?").get(phone);
+    const db = await getDb();
+    const exists = await db.get("SELECT id FROM users WHERE phone = ?", phone);
     if (exists) return jsonError("خریداری با این شماره تماس قبلاً ثبت شده است.", 409);
 
     const passwordHash = hashPassword(body.password || "client1234");
-    const res = db
-      .prepare(
-        `INSERT INTO users (name, phone, email, company_name, city, role, password_hash, is_active, created_at)
-         VALUES (?, ?, ?, ?, ?, 'CUSTOMER', ?, 1, ?)`
-      )
-      .run(
-        name,
-        phone,
-        (body.email ?? "").trim(),
-        (body.companyName ?? "").trim(),
-        (body.city ?? "تهران").trim(),
-        passwordHash,
-        new Date().toISOString()
-      );
+    const res = await db.run(
+      `INSERT INTO users (name, phone, email, company_name, city, role, password_hash, is_active, created_at)
+       VALUES (?, ?, ?, ?, ?, 'CUSTOMER', ?, 1, ?)`,
+      name,
+      phone,
+      (body.email ?? "").trim(),
+      (body.companyName ?? "").trim(),
+      (body.city ?? "تهران").trim(),
+      passwordHash,
+      new Date().toISOString()
+    );
+
+    const [buyers, sellers] = await Promise.all([
+      listBuyersWithStats(),
+      listSellersWithStats(),
+    ]);
 
     return NextResponse.json(
       {
         ok: true,
         customerId: Number(res.lastInsertRowid),
-        buyers: listBuyersWithStats(),
-        sellers: listSellersWithStats(),
+        buyers,
+        sellers,
       },
       { status: 201 }
     );

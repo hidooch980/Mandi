@@ -121,41 +121,43 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* One-Click Demo Accounts for Staff */}
-          <div className="pt-3 border-t border-slate-200 space-y-2.5">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
-              <Shield className="w-4 h-4 text-emerald-600" />
-              <span>ورود سریع نمونه (مدیریت و کارشناس):</span>
+          {/* One-Click Demo Accounts for Staff (hidden when NEXT_PUBLIC_HIDE_DEMO=1) */}
+          {process.env.NEXT_PUBLIC_HIDE_DEMO !== "1" && (
+            <div className="pt-3 border-t border-slate-200 space-y-2.5">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                <Shield className="w-4 h-4 text-emerald-600" />
+                <span>ورود سریع نمونه (مدیریت و کارشناس):</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => submitLogin("09120000001", "admin1234")}
+                  className="p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-right transition cursor-pointer"
+                >
+                  <div className="text-xs font-bold text-emerald-900">
+                    ورود مدیر سیستم
+                  </div>
+                  <div className="text-[11px] text-emerald-700 tabular-nums" dir="ltr">
+                    09120000001 / admin1234
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => submitLogin("09120000002", "sales1234")}
+                  className="p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-right transition cursor-pointer"
+                >
+                  <div className="text-xs font-bold text-amber-900">
+                    ورود کارشناس خرید و فروش
+                  </div>
+                  <div className="text-[11px] text-amber-700 tabular-nums" dir="ltr">
+                    09120000002 / sales1234
+                  </div>
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => submitLogin("09120000001", "admin1234")}
-                className="p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-right transition cursor-pointer"
-              >
-                <div className="text-xs font-bold text-emerald-900">
-                  ورود مدیر سیستم
-                </div>
-                <div className="text-[11px] text-emerald-700 tabular-nums" dir="ltr">
-                  09120000001 / admin1234
-                </div>
-              </button>
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => submitLogin("09120000002", "sales1234")}
-                className="p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-right transition cursor-pointer"
-              >
-                <div className="text-xs font-bold text-amber-900">
-                  ورود کارشناس خرید و فروش
-                </div>
-                <div className="text-[11px] text-amber-700 tabular-nums" dir="ltr">
-                  09120000002 / sales1234
-                </div>
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

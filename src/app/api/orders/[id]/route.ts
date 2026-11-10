@@ -22,7 +22,7 @@ export async function GET(
   const orderId = Number(id);
   if (!orderId) return jsonError("شناسه سند معتبر نیست.", 400);
 
-  const order = getOrderById(orderId);
+  const order = await getOrderById(orderId);
   if (!order) return jsonError("سند یافت نشد.", 404);
 
   if (!isStaffRole(auth.user.role) && order.customerId !== auth.user.id) {
@@ -43,7 +43,7 @@ export async function PATCH(
   const orderId = Number(id);
   if (!orderId) return jsonError("شناسه سند معتبر نیست.", 400);
 
-  const existing = getOrderById(orderId);
+  const existing = await getOrderById(orderId);
   if (!existing) return jsonError("سند یافت نشد.", 404);
 
   try {
@@ -57,26 +57,35 @@ export async function PATCH(
 
     const nextStatus = body.status ?? existing.status;
     const nextPayment = body.paymentStatus ?? existing.paymentStatus;
-    const db = getDb();
+    const db = await getDb();
     const now = new Date().toISOString();
 
-    db.exec("BEGIN");
-    try {
+    await db.transaction(async (tx) => {
       if (existing.tradeType === "PURCHASE") {
         const wasDelivered = existing.status === "DELIVERED";
         const willBeDelivered = nextStatus === "DELIVERED";
 
         if (!wasDelivered && willBeDelivered) {
           for (const item of existing.items) {
-            db.prepare(
-              "UPDATE products SET stock_barrels = stock_barrels + ?, updated_at = ? WHERE id = ?"
-            ).run(item.quantityBarrels, now, item.productId);
+            await tx.run(
+              "UPDATE products SET stock_barrels = stock_barrels + ?, updated_at = ? WHERE id = ?",
+              item.quantityBarrels,
+              now,
+              item.productId
+            );
           }
         } else if (wasDelivered && !willBeDelivered) {
           for (const item of existing.items) {
-            db.prepare(
-              "UPDATE products SET stock_barrels = MAX(0, stock_barrels - ?), updated_at = ? WHERE id = ?"
-            ).run(item.quantityBarrels, now, item.productId);
+            await tx.run(
+              `UPDATE products
+               SET stock_barrels = CASE WHEN stock_barrels - ? < 0 THEN 0 ELSE stock_barrels - ? END,
+                   updated_at = ?
+               WHERE id = ?`,
+              item.quantityBarrels,
+              item.quantityBarrels,
+              now,
+              item.productId
+            );
           }
         }
       } else {
@@ -90,13 +99,23 @@ export async function PATCH(
         if (!wasCancelled && willBeCancelled) {
           for (const item of existing.items) {
             if (wasDispatchedOrDelivered) {
-              db.prepare(
-                "UPDATE products SET stock_barrels = stock_barrels + ?, updated_at = ? WHERE id = ?"
-              ).run(item.quantityBarrels, now, item.productId);
+              await tx.run(
+                "UPDATE products SET stock_barrels = stock_barrels + ?, updated_at = ? WHERE id = ?",
+                item.quantityBarrels,
+                now,
+                item.productId
+              );
             } else {
-              db.prepare(
-                "UPDATE products SET reserved_barrels = MAX(0, reserved_barrels - ?), updated_at = ? WHERE id = ?"
-              ).run(item.quantityBarrels, now, item.productId);
+              await tx.run(
+                `UPDATE products
+                 SET reserved_barrels = CASE WHEN reserved_barrels - ? < 0 THEN 0 ELSE reserved_barrels - ? END,
+                     updated_at = ?
+                 WHERE id = ?`,
+                item.quantityBarrels,
+                item.quantityBarrels,
+                now,
+                item.productId
+              );
             }
           }
         } else if (
@@ -105,18 +124,24 @@ export async function PATCH(
           !wasCancelled
         ) {
           for (const item of existing.items) {
-            db.prepare(
+            await tx.run(
               `UPDATE products
-               SET stock_barrels = MAX(0, stock_barrels - ?),
-                   reserved_barrels = MAX(0, reserved_barrels - ?),
+               SET stock_barrels = CASE WHEN stock_barrels - ? < 0 THEN 0 ELSE stock_barrels - ? END,
+                   reserved_barrels = CASE WHEN reserved_barrels - ? < 0 THEN 0 ELSE reserved_barrels - ? END,
                    updated_at = ?
-               WHERE id = ?`
-            ).run(item.quantityBarrels, item.quantityBarrels, now, item.productId);
+               WHERE id = ?`,
+              item.quantityBarrels,
+              item.quantityBarrels,
+              item.quantityBarrels,
+              item.quantityBarrels,
+              now,
+              item.productId
+            );
           }
         }
       }
 
-      db.prepare(
+      await tx.run(
         `UPDATE orders SET
           status = ?,
           payment_status = ?,
@@ -124,8 +149,7 @@ export async function PATCH(
           waybill_number = ?,
           notes = ?,
           updated_at = ?
-        WHERE id = ?`
-      ).run(
+        WHERE id = ?`,
         nextStatus,
         nextPayment,
         body.driverPlate !== undefined ? body.driverPlate.trim() : existing.driverPlate,
@@ -136,13 +160,9 @@ export async function PATCH(
         now,
         orderId
       );
+    });
 
-      db.exec("COMMIT");
-      return NextResponse.json({ ok: true, order: getOrderById(orderId) });
-    } catch (innerErr) {
-      db.exec("ROLLBACK");
-      throw innerErr;
-    }
+    return NextResponse.json({ ok: true, order: await getOrderById(orderId) });
   } catch (err) {
     return jsonError(
       err instanceof Error ? err.message : "خطا در بروزرسانی معامله",

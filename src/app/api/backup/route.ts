@@ -16,14 +16,24 @@ export async function GET() {
   const auth = await requireStaffUser();
   if (auth.response) return auth.response;
 
+  const [config, sources, latestDieselQuotes, warehouses, products, trades] =
+    await Promise.all([
+      getMarketConfig(),
+      listPriceSources(),
+      listLatestPriceQuotes(true),
+      listWarehouses(),
+      listProductsWithPricing(false),
+      listOrders(),
+    ]);
+
   const snapshot = {
     exportedAt: new Date().toISOString(),
-    config: getMarketConfig(),
-    sources: listPriceSources(),
-    latestDieselQuotes: listLatestPriceQuotes(true),
-    warehouses: listWarehouses(),
-    products: listProductsWithPricing(false),
-    trades: listOrders(),
+    config,
+    sources,
+    latestDieselQuotes,
+    warehouses,
+    products,
+    trades,
   };
 
   return new NextResponse(JSON.stringify(snapshot, null, 2), {

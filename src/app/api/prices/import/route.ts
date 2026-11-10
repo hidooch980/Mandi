@@ -24,35 +24,32 @@ export async function POST(req: Request) {
       );
     }
 
-    const db = getDb();
-    const config = getMarketConfig();
+    const db = await getDb();
+    const config = await getMarketConfig();
     const now = new Date().toISOString();
 
-    const findSourceByName = db.prepare(
-      "SELECT id FROM price_sources WHERE name = ? LIMIT 1"
-    );
-    const insertSource = db.prepare(`
+    const findSourceSql = "SELECT id FROM price_sources WHERE name = ? LIMIT 1";
+    const insertSourceSql = `
       INSERT INTO price_sources (
         name, code, type, city, contact_info, api_url, confidence_weight,
         default_freight_per_barrel_toman, is_active, created_at
       ) VALUES (?, ?, ?, ?, ?, '', ?, ?, 1, ?)
-    `);
-    const insertQuote = db.prepare(`
+    `;
+    const insertQuoteSql = `
       INSERT INTO price_quotes (
         source_id, fuel_type, raw_price, currency, unit, barrel_liters, density,
         includes_barrel, freight_per_barrel_toman, available_barrels, notes,
         recorded_by, recorded_at
       ) VALUES (?, 'DIESEL', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    `;
 
     let importedCount = 0;
     for (const row of parsed.rows) {
-      let sourceRow = findSourceByName.get(row.sourceName) as
-        | { id: number }
-        | undefined;
+      let sourceRow = await db.get<{ id: number }>(findSourceSql, row.sourceName);
       if (!sourceRow) {
         const code = `IMP-${Date.now().toString().slice(-4)}-${importedCount + 1}`;
-        const created = insertSource.run(
+        const created = await db.run(
+          insertSourceSql,
           row.sourceName,
           code,
           row.sourceType,
@@ -65,7 +62,8 @@ export async function POST(req: Request) {
         sourceRow = { id: Number(created.lastInsertRowid) };
       }
 
-      insertQuote.run(
+      await db.run(
+        insertQuoteSql,
         sourceRow.id,
         row.rawPrice,
         row.currency,
@@ -82,13 +80,13 @@ export async function POST(req: Request) {
       importedCount += 1;
     }
 
-    snapshotDieselHistory();
+    await snapshotDieselHistory();
 
     return NextResponse.json({
       ok: true,
       importedCount,
       warnings: parsed.errors,
-      state: getFullDiscoveryState(),
+      state: await getFullDiscoveryState(),
     });
   } catch (err) {
     return jsonError(

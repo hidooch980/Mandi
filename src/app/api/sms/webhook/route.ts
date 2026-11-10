@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       body?: string;
     };
 
-    const cfg = getSmsConfig();
+    const cfg = await getSmsConfig();
     const providedSecret = body.secret ?? req.headers.get("x-sms-secret");
     const hasSecret = isValidSecret(providedSecret, cfg.gatewaySecret);
 
@@ -52,11 +52,11 @@ export async function POST(req: Request) {
       return jsonError("متن پیامک دریافتی خالی است.", 400);
     }
 
-    const outcome = processInboundSmsReply({ fromPhone, message });
+    const outcome = await processInboundSmsReply({ fromPhone, message });
 
     return NextResponse.json({
       ...outcome,
-      logs: listSmsLogs(60),
+      logs: await listSmsLogs(60),
     });
   } catch (err) {
     return jsonError(

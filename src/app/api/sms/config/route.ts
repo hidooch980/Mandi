@@ -16,11 +16,16 @@ export async function GET() {
   if (auth.response) return auth.response;
 
   ensureSmsSchedulerStarted();
+  const [config, sources, logs] = await Promise.all([
+    getSmsConfig(),
+    listPriceSources(),
+    listSmsLogs(60),
+  ]);
   return NextResponse.json({
     ok: true,
-    config: getSmsConfig(),
-    sources: listPriceSources(),
-    logs: listSmsLogs(60),
+    config,
+    sources,
+    logs,
   });
 }
 
@@ -38,8 +43,8 @@ export async function PATCH(req: Request) {
       autoDiscoverOnReply: boolean;
     }>;
 
-    const cur = getSmsConfig();
-    const db = getDb();
+    const cur = await getSmsConfig();
+    const db = await getDb();
     const now = new Date().toISOString();
     const interval = Math.min(
       1440,
@@ -50,7 +55,8 @@ export async function PATCH(req: Request) {
       ? cur.nextRunAt || new Date(Date.now() + interval * 60_000).toISOString()
       : "";
 
-    db.prepare(`
+    await db.run(
+      `
       UPDATE sms_config SET
         is_enabled = ?,
         interval_minutes = ?,
@@ -61,7 +67,7 @@ export async function PATCH(req: Request) {
         next_run_at = ?,
         updated_at = ?
       WHERE id = 1
-    `).run(
+    `,
       enabled ? 1 : 0,
       interval,
       (body.managerPhone ?? cur.managerPhone).trim(),
@@ -82,11 +88,17 @@ export async function PATCH(req: Request) {
       ensureSmsSchedulerStarted();
     }
 
+    const [config, sources, logs] = await Promise.all([
+      getSmsConfig(),
+      listPriceSources(),
+      listSmsLogs(60),
+    ]);
+
     return NextResponse.json({
       ok: true,
-      config: getSmsConfig(),
-      sources: listPriceSources(),
-      logs: listSmsLogs(60),
+      config,
+      sources,
+      logs,
     });
   } catch (err) {
     return jsonError(

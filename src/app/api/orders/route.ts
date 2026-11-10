@@ -21,8 +21,8 @@ export async function GET() {
   if (auth.response) return auth.response;
 
   const orders = isStaffRole(auth.user.role)
-    ? listOrders()
-    : listOrders(auth.user.id);
+    ? await listOrders()
+    : await listOrders(auth.user.id);
 
   return NextResponse.json({ ok: true, orders });
 }
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
       return jsonError("انتخاب نوع سوخت (بنزین/گازوئیل) و تعداد معتبر الزامی است.", 400);
     }
 
-    const products = listProductsWithPricing(false);
+    const products = await listProductsWithPricing(false);
     const product = products.find((p) => p.id === productId && p.isActive);
     if (!product) {
       return jsonError("محصول انتخاب‌شده موجود یا فعال نیست.", 404);
@@ -91,8 +91,8 @@ export async function POST(req: Request) {
       }
     }
 
-    const config = getMarketConfig();
-    const dieselSummary = getDieselDiscoverySummary(config);
+    const config = await getMarketConfig();
+    const dieselSummary = await getDieselDiscoverySummary(config);
     const bestDieselCostBasis =
       dieselSummary.bestBuy?.landedPerBarrelToman
         ? dieselSummary.bestBuy.landedPerBarrelToman *
@@ -156,8 +156,8 @@ export async function POST(req: Request) {
         ? body.customerCompany.trim()
         : auth.user.companyName;
 
-    const db = getDb();
-    const orderNumber = generateNextOrderNumber(tradeType);
+    const db = await getDb();
+    const orderNumber = await generateNextOrderNumber(tradeType);
     const now = new Date().toISOString();
 
     const initialStatus: OrderStatus =
@@ -172,53 +172,48 @@ export async function POST(req: Request) {
     const initialPayment: PaymentStatus =
       tradeType === "PURCHASE" && body.receiveImmediately ? "PAID" : "UNPAID";
 
-    db.exec("BEGIN");
-    try {
-      const orderRes = db
-        .prepare(
-          `INSERT INTO orders (
-            order_number, trade_type, customer_id, customer_name, customer_phone, customer_company,
-            destination_city, delivery_address, status, payment_status, payment_method,
-            subtotal_toman, freight_toman, discount_toman, vat_toman, total_toman,
-            usd_rate_snapshot, estimated_cost_toman, estimated_profit_toman,
-            driver_plate, waybill_number, notes, created_by, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, ?)`
-        )
-        .run(
-          orderNumber,
-          tradeType,
-          customerId,
-          customerName,
-          customerPhone,
-          customerCompany,
-          destinationCity,
-          (body.deliveryAddress ?? "").trim(),
-          initialStatus,
-          initialPayment,
-          (body.paymentMethod ?? "کارت به کارت / نقدی").trim(),
-          economics.subtotalToman,
-          economics.freightToman,
-          economics.discountToman,
-          economics.vatToman,
-          economics.totalToman,
-          config.usdToToman,
-          economics.estimatedCostToman,
-          economics.estimatedProfitToman,
-          (body.notes ?? "").trim(),
-          auth.user.name,
-          now,
-          now
-        );
+    const orderId = await db.transaction(async (tx) => {
+      const orderRes = await tx.run(
+        `INSERT INTO orders (
+          order_number, trade_type, customer_id, customer_name, customer_phone, customer_company,
+          destination_city, delivery_address, status, payment_status, payment_method,
+          subtotal_toman, freight_toman, discount_toman, vat_toman, total_toman,
+          usd_rate_snapshot, estimated_cost_toman, estimated_profit_toman,
+          driver_plate, waybill_number, notes, created_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, ?)`,
+        orderNumber,
+        tradeType,
+        customerId,
+        customerName,
+        customerPhone,
+        customerCompany,
+        destinationCity,
+        (body.deliveryAddress ?? "").trim(),
+        initialStatus,
+        initialPayment,
+        (body.paymentMethod ?? "کارت به کارت / نقدی").trim(),
+        economics.subtotalToman,
+        economics.freightToman,
+        economics.discountToman,
+        economics.vatToman,
+        economics.totalToman,
+        config.usdToToman,
+        economics.estimatedCostToman,
+        economics.estimatedProfitToman,
+        (body.notes ?? "").trim(),
+        auth.user.name,
+        now,
+        now
+      );
 
-      const orderId = Number(orderRes.lastInsertRowid);
+      const newOrderId = Number(orderRes.lastInsertRowid);
 
-      db.prepare(
+      await tx.run(
         `INSERT INTO order_items (
           order_id, product_id, product_name, fuel_type, barrel_liters, density,
           quantity_barrels, total_liters, total_tons, unit_price_barrel_toman, line_total_toman
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(
-        orderId,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        newOrderId,
         product.id,
         product.name,
         product.fuelType,
@@ -232,30 +227,36 @@ export async function POST(req: Request) {
       );
 
       if (tradeType === "SALE") {
-        db.prepare(
-          "UPDATE products SET reserved_barrels = reserved_barrels + ?, updated_at = ? WHERE id = ?"
-        ).run(economics.quantityBarrels, now, product.id);
+        await tx.run(
+          "UPDATE products SET reserved_barrels = reserved_barrels + ?, updated_at = ? WHERE id = ?",
+          economics.quantityBarrels,
+          now,
+          product.id
+        );
       } else {
-        // Update product last recorded buy cost AND increment stock if received
         if (initialStatus === "DELIVERED") {
-          db.prepare(
-            "UPDATE products SET stock_barrels = stock_barrels + ?, last_cost_per_barrel_toman = ?, updated_at = ? WHERE id = ?"
-          ).run(economics.quantityBarrels, unitPricePerBarrel, now, product.id);
+          await tx.run(
+            "UPDATE products SET stock_barrels = stock_barrels + ?, last_cost_per_barrel_toman = ?, updated_at = ? WHERE id = ?",
+            economics.quantityBarrels,
+            unitPricePerBarrel,
+            now,
+            product.id
+          );
         } else {
-          db.prepare(
-            "UPDATE products SET last_cost_per_barrel_toman = ?, updated_at = ? WHERE id = ?"
-          ).run(unitPricePerBarrel, now, product.id);
+          await tx.run(
+            "UPDATE products SET last_cost_per_barrel_toman = ?, updated_at = ? WHERE id = ?",
+            unitPricePerBarrel,
+            now,
+            product.id
+          );
         }
       }
 
-      db.exec("COMMIT");
+      return newOrderId;
+    });
 
-      const created = getOrderById(orderId);
-      return NextResponse.json({ ok: true, order: created }, { status: 201 });
-    } catch (innerErr) {
-      db.exec("ROLLBACK");
-      throw innerErr;
-    }
+    const created = await getOrderById(orderId);
+    return NextResponse.json({ ok: true, order: created }, { status: 201 });
   } catch (err) {
     return jsonError(
       err instanceof Error ? err.message : "خطا در ثبت معامله",

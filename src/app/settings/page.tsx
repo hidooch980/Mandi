@@ -12,7 +12,7 @@ export default async function SettingsPage() {
   if (!user) redirect("/login");
   if (!isStaffRole(user.role)) redirect("/portal");
 
-  const config = getMarketConfig();
+  const config = await getMarketConfig();
 
   return (
     <AppShell user={user} usdToToman={config.usdToToman}>

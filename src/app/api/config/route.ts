@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({ ok: true, config: getMarketConfig() });
+  return NextResponse.json({ ok: true, config: await getMarketConfig() });
 }
 
 export async function PATCH(req: Request) {
@@ -33,11 +33,12 @@ export async function PATCH(req: Request) {
       companyEconomicCode: string;
     }>;
 
-    const cur = getMarketConfig();
-    const db = getDb();
+    const cur = await getMarketConfig();
+    const db = await getDb();
     const now = new Date().toISOString();
 
-    db.prepare(`
+    await db.run(
+      `
       UPDATE market_config SET
         usd_to_toman = ?,
         aed_to_toman = ?,
@@ -57,7 +58,7 @@ export async function PATCH(req: Request) {
         company_economic_code = ?,
         updated_at = ?
       WHERE id = 1
-    `).run(
+    `,
       Math.max(Number(body.usdToToman ?? cur.usdToToman), 1),
       Math.max(Number(body.aedToToman ?? cur.aedToToman), 1),
       Math.min(0.95, Math.max(0.7, Number(body.dieselDensity ?? cur.dieselDensity))),
@@ -86,7 +87,7 @@ export async function PATCH(req: Request) {
       now
     );
 
-    return NextResponse.json({ ok: true, config: getMarketConfig() });
+    return NextResponse.json({ ok: true, config: await getMarketConfig() });
   } catch (err) {
     return jsonError(
       err instanceof Error ? err.message : "خطا در ذخیره تنظیمات بازار",

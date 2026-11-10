@@ -13,15 +13,18 @@ export default async function OrdersPage() {
   if (!user) redirect("/login");
   if (!isStaffRole(user.role)) redirect("/portal");
 
-  const config = getMarketConfig();
-  const orders = listOrders();
-  const products = listProductsWithPricing(false);
-  const db = getDb();
-  const customerRows = db
-    .prepare("SELECT * FROM users WHERE role = 'CUSTOMER' ORDER BY id DESC")
-    .all() as Record<string, unknown>[];
+  const db = await getDb();
+  const [config, orders, products, customerRows, allSources] = await Promise.all([
+    getMarketConfig(),
+    listOrders(),
+    listProductsWithPricing(false),
+    db.all<Record<string, unknown>>(
+      "SELECT * FROM users WHERE role = 'CUSTOMER' ORDER BY id DESC"
+    ),
+    listPriceSources(),
+  ]);
   const customers = customerRows.map(mapUserRow);
-  const sellers = listPriceSources().filter((s) => s.isActive);
+  const sellers = allSources.filter((s) => s.isActive);
 
   return (
     <AppShell user={user} usdToToman={config.usdToToman}>

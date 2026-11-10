@@ -36,52 +36,53 @@ export async function POST(req: Request) {
       return jsonError("مبلغ استعلام معتبر الزامی است.", 400);
     }
 
-    const db = getDb();
+    const db = await getDb();
     const now = new Date().toISOString();
     let sourceId = Number(body.sourceId ?? 0);
     let defaultFreight = 0;
 
     if (body.newSourceName && body.newSourceName.trim().length > 0) {
       const cleanName = body.newSourceName.trim();
-      const existing = db
-        .prepare("SELECT id, default_freight_per_barrel_toman FROM price_sources WHERE name = ? LIMIT 1")
-        .get(cleanName) as
-        | { id: number; default_freight_per_barrel_toman: number }
-        | undefined;
+      const existing = await db.get<{
+        id: number;
+        default_freight_per_barrel_toman: number;
+      }>(
+        "SELECT id, default_freight_per_barrel_toman FROM price_sources WHERE name = ? LIMIT 1",
+        cleanName
+      );
       if (existing) {
         sourceId = Number(existing.id);
         defaultFreight = Number(existing.default_freight_per_barrel_toman);
       } else {
-        const created = db
-          .prepare(
-            `INSERT INTO price_sources (
-              name, code, type, city, contact_info, api_url, confidence_weight,
-              default_freight_per_barrel_toman, is_active, created_at
-            ) VALUES (?, ?, ?, ?, ?, '', 85, 0, 1, ?)`
-          )
-          .run(
-            cleanName,
-            `Q-${Date.now().toString().slice(-6)}`,
-            body.newSourceType ?? "BROKER_PHONE",
-            (body.newSourceCity ?? "واتساپ / تلفنی").trim(),
-            (body.newSourceContact ?? "").trim(),
-            now
-          );
+        const created = await db.run(
+          `INSERT INTO price_sources (
+            name, code, type, city, contact_info, api_url, confidence_weight,
+            default_freight_per_barrel_toman, is_active, created_at
+          ) VALUES (?, ?, ?, ?, ?, '', 85, 0, 1, ?)`,
+          cleanName,
+          `Q-${Date.now().toString().slice(-6)}`,
+          body.newSourceType ?? "BROKER_PHONE",
+          (body.newSourceCity ?? "واتساپ / تلفنی").trim(),
+          (body.newSourceContact ?? "").trim(),
+          now
+        );
         sourceId = Number(created.lastInsertRowid);
       }
     } else {
-      const source = db
-        .prepare("SELECT id, default_freight_per_barrel_toman FROM price_sources WHERE id = ?")
-        .get(sourceId) as
-        | { id: number; default_freight_per_barrel_toman: number }
-        | undefined;
+      const source = await db.get<{
+        id: number;
+        default_freight_per_barrel_toman: number;
+      }>(
+        "SELECT id, default_freight_per_barrel_toman FROM price_sources WHERE id = ?",
+        sourceId
+      );
       if (!source) {
         return jsonError("دلال یا کانال استعلام انتخاب‌شده یافت نشد.", 404);
       }
       defaultFreight = Number(source.default_freight_per_barrel_toman);
     }
 
-    const config = getMarketConfig();
+    const config = await getMarketConfig();
     const barrelLiters = Math.max(
       Number(body.barrelLiters ?? config.defaultBarrelLiters),
       10
@@ -95,36 +96,33 @@ export async function POST(req: Request) {
         ? Math.max(Number(body.freightPerBarrelToman), 0)
         : defaultFreight;
 
-    const result = db
-      .prepare(
-        `INSERT INTO price_quotes (
-          source_id, fuel_type, raw_price, currency, unit, barrel_liters, density,
-          includes_barrel, freight_per_barrel_toman, available_barrels, notes,
-          recorded_by, recorded_at
-        ) VALUES (?, 'DIESEL', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        sourceId,
-        rawPrice,
-        currency,
-        unit,
-        barrelLiters,
-        density,
-        body.includesBarrel === false ? 0 : 1,
-        freight,
-        Math.max(Math.floor(Number(body.availableBarrels ?? 1)), 0),
-        (body.notes ?? "").trim(),
-        auth.user.name,
-        now
-      );
+    const result = await db.run(
+      `INSERT INTO price_quotes (
+        source_id, fuel_type, raw_price, currency, unit, barrel_liters, density,
+        includes_barrel, freight_per_barrel_toman, available_barrels, notes,
+        recorded_by, recorded_at
+      ) VALUES (?, 'DIESEL', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      sourceId,
+      rawPrice,
+      currency,
+      unit,
+      barrelLiters,
+      density,
+      body.includesBarrel === false ? 0 : 1,
+      freight,
+      Math.max(Math.floor(Number(body.availableBarrels ?? 1)), 0),
+      (body.notes ?? "").trim(),
+      auth.user.name,
+      now
+    );
 
-    snapshotDieselHistory();
+    await snapshotDieselHistory();
 
     return NextResponse.json(
       {
         ok: true,
         quoteId: Number(result.lastInsertRowid),
-        state: getFullDiscoveryState(),
+        state: await getFullDiscoveryState(),
       },
       { status: 201 }
     );

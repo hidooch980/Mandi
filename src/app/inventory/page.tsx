@@ -13,9 +13,11 @@ export default async function InventoryPage() {
   if (!user) redirect("/login");
   if (!isStaffRole(user.role)) redirect("/portal");
 
-  const config = getMarketConfig();
-  const products = listProductsWithPricing(false);
-  const warehouses = listWarehouses();
+  const [config, products, warehouses] = await Promise.all([
+    getMarketConfig(),
+    listProductsWithPricing(false),
+    listWarehouses(),
+  ]);
 
   return (
     <AppShell user={user} usdToToman={config.usdToToman}>

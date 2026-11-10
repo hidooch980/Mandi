@@ -14,11 +14,12 @@ export async function POST() {
 
   ensureSmsSchedulerStarted();
   const result = await dispatchHourlySmsInquiries({ force: true });
+  const [config, logs] = await Promise.all([getSmsConfig(), listSmsLogs(60)]);
 
   return NextResponse.json({
     ok: true,
     result,
-    config: getSmsConfig(),
-    logs: listSmsLogs(60),
+    config,
+    logs,
   });
 }

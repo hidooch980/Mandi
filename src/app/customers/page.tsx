@@ -16,9 +16,11 @@ export default async function CustomersPage() {
   if (!user) redirect("/login");
   if (!isStaffRole(user.role)) redirect("/portal");
 
-  const config = getMarketConfig();
-  const buyers = listBuyersWithStats();
-  const sellers = listSellersWithStats();
+  const [config, buyers, sellers] = await Promise.all([
+    getMarketConfig(),
+    listBuyersWithStats(),
+    listSellersWithStats(),
+  ]);
 
   return (
     <AppShell user={user} usdToToman={config.usdToToman}>

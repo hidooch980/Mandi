@@ -19,10 +19,12 @@ export default async function SmsAutomationPage() {
   if (!isStaffRole(user.role)) redirect("/portal");
 
   ensureSmsSchedulerStarted();
-  const marketConfig = getMarketConfig();
-  const smsConfig = getSmsConfig();
-  const sources = listPriceSources();
-  const logs = listSmsLogs(60);
+  const [marketConfig, smsConfig, sources, logs] = await Promise.all([
+    getMarketConfig(),
+    getSmsConfig(),
+    listPriceSources(),
+    listSmsLogs(60),
+  ]);
 
   return (
     <AppShell user={user} usdToToman={marketConfig.usdToToman}>

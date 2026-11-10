@@ -40,19 +40,22 @@ export async function POST(req: Request) {
     };
     const mode = body.mode ?? "LIVE";
 
-    const db = getDb();
-    const config = getMarketConfig();
-    const sources = listPriceSources().filter((s) => s.isActive);
-    const latestQuotes = listLatestPriceQuotes(false);
+    const db = await getDb();
+    const [config, allSources, latestQuotes] = await Promise.all([
+      getMarketConfig(),
+      listPriceSources(),
+      listLatestPriceQuotes(false),
+    ]);
+    const sources = allSources.filter((s) => s.isActive);
     const now = new Date().toISOString();
 
-    const insertQuote = db.prepare(`
+    const insertQuoteSql = `
       INSERT INTO price_quotes (
         source_id, fuel_type, raw_price, currency, unit, barrel_liters, density,
         includes_barrel, freight_per_barrel_toman, available_barrels, notes,
         recorded_by, recorded_at
       ) VALUES (?, 'DIESEL', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    `;
 
     let syncedCount = 0;
     const logs: string[] = [];
@@ -91,7 +94,8 @@ export async function POST(req: Request) {
             logs.push(`${src.name}: فیلد price معتبر در خروجی JSON یافت نشد.`);
             continue;
           }
-          insertQuote.run(
+          await db.run(
+            insertQuoteSql,
             src.id,
             payload.price,
             payload.currency ?? "TOMAN",
@@ -122,7 +126,8 @@ export async function POST(req: Request) {
             ? Number((q.rawPrice * deltaFactor).toFixed(2))
             : Math.round(q.rawPrice * deltaFactor);
 
-        insertQuote.run(
+        await db.run(
+          insertQuoteSql,
           q.sourceId,
           updatedRaw,
           q.currency,
@@ -141,13 +146,13 @@ export async function POST(req: Request) {
       logs.push(`${syncedCount} استعلام گازوئیل با نوسان لحظه‌ای بازار بروزرسانی شد.`);
     }
 
-    snapshotDieselHistory();
+    await snapshotDieselHistory();
 
     return NextResponse.json({
       ok: true,
       syncedCount,
       logs,
-      state: getFullDiscoveryState(),
+      state: await getFullDiscoveryState(),
     });
   } catch (err) {
     return jsonError(

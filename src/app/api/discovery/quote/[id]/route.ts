@@ -16,14 +16,14 @@ export async function DELETE(
   const quoteId = Number(id);
   if (!quoteId) return jsonError("شناسه استعلام معتبر نیست.", 400);
 
-  const db = getDb();
-  const res = db.prepare("DELETE FROM price_quotes WHERE id = ?").run(quoteId);
+  const db = await getDb();
+  const res = await db.run("DELETE FROM price_quotes WHERE id = ?", quoteId);
   if (res.changes === 0) {
     return jsonError("استعلام مورد نظر پیدا نشد.", 404);
   }
 
   return NextResponse.json({
     ok: true,
-    state: getFullDiscoveryState(),
+    state: await getFullDiscoveryState(),
   });
 }

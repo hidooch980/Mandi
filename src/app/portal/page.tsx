@@ -12,9 +12,11 @@ export default async function CustomerPortalPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const config = getMarketConfig();
-  const products = listProductsWithPricing(true);
-  const orders = isStaffRole(user.role) ? listOrders() : listOrders(user.id);
+  const [config, products, orders] = await Promise.all([
+    getMarketConfig(),
+    listProductsWithPricing(true),
+    isStaffRole(user.role) ? listOrders() : listOrders(user.id),
+  ]);
 
   return (
     <AppShell user={user} usdToToman={config.usdToToman}>

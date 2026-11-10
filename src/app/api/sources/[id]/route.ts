@@ -25,13 +25,14 @@ export async function PATCH(
       apiUrl: string;
     }>;
 
-    const db = getDb();
-    const row = db
-      .prepare("SELECT * FROM price_sources WHERE id = ?")
-      .get(sourceId) as Record<string, unknown> | undefined;
+    const db = await getDb();
+    const row = await db.get<Record<string, unknown>>(
+      "SELECT * FROM price_sources WHERE id = ?",
+      sourceId
+    );
     if (!row) return jsonError("منبع یافت نشد.", 404);
 
-    db.prepare(
+    await db.run(
       `UPDATE price_sources SET
         is_active = ?,
         is_sms_target = ?,
@@ -39,8 +40,7 @@ export async function PATCH(
         confidence_weight = ?,
         default_freight_per_barrel_toman = ?,
         api_url = ?
-       WHERE id = ?`
-    ).run(
+       WHERE id = ?`,
       body.isActive !== undefined ? (body.isActive ? 1 : 0) : Number(row.is_active),
       body.isSmsTarget !== undefined
         ? body.isSmsTarget
@@ -60,7 +60,7 @@ export async function PATCH(
       sourceId
     );
 
-    return NextResponse.json({ ok: true, sources: listPriceSources() });
+    return NextResponse.json({ ok: true, sources: await listPriceSources() });
   } catch (err) {
     return jsonError(
       err instanceof Error ? err.message : "خطا در ویرایش منبع",
@@ -80,9 +80,9 @@ export async function DELETE(
   const sourceId = Number(id);
   if (!sourceId) return jsonError("شناسه منبع معتبر نیست.", 400);
 
-  const db = getDb();
-  const res = db.prepare("DELETE FROM price_sources WHERE id = ?").run(sourceId);
+  const db = await getDb();
+  const res = await db.run("DELETE FROM price_sources WHERE id = ?", sourceId);
   if (res.changes === 0) return jsonError("منبع یافت نشد.", 404);
 
-  return NextResponse.json({ ok: true, sources: listPriceSources() });
+  return NextResponse.json({ ok: true, sources: await listPriceSources() });
 }

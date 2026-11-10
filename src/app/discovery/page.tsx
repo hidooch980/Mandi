@@ -12,7 +12,7 @@ export default async function DiscoveryPage() {
   if (!user) redirect("/login");
   if (!isStaffRole(user.role)) redirect("/portal");
 
-  const state = getFullDiscoveryState();
+  const state = await getFullDiscoveryState();
 
   return (
     <AppShell user={user} usdToToman={state.config.usdToToman}>
