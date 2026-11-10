@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { DashboardClient } from "@/components/DashboardClient";
 import { getCurrentUser, isStaffRole } from "@/lib/auth";
-import { listOrders } from "@/lib/db";
+import { getLedgerSummary, listOrders } from "@/lib/db";
 import { getFullDiscoveryState } from "@/lib/services";
 
 export const runtime = "nodejs";
@@ -13,9 +13,10 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
   if (!isStaffRole(user.role)) redirect("/portal");
 
-  const [state, orders] = await Promise.all([
+  const [state, orders, ledgerSummary] = await Promise.all([
     getFullDiscoveryState(),
     listOrders(),
+    getLedgerSummary(),
   ]);
 
   return (
@@ -26,6 +27,7 @@ export default async function DashboardPage() {
         history={state.history}
         products={state.products}
         orders={orders}
+        ledgerSummary={ledgerSummary}
       />
     </AppShell>
   );

@@ -178,6 +178,29 @@ export default async function InvoicePage({
                 <span>مبلغ نهایی سند:</span>
                 <span>{formatNumberFa(order.totalToman)} تومان</span>
               </div>
+              {(() => {
+                const paidAmt =
+                  order.paidToman > 0
+                    ? order.paidToman
+                    : order.paymentStatus === "PAID"
+                      ? order.totalToman
+                      : 0;
+                const remAmt = Math.max(order.totalToman - paidAmt, 0);
+                return (
+                  <>
+                    <div className="flex justify-between text-xs text-emerald-700">
+                      <span>مبلغ پرداخت‌شده:</span>
+                      <span className="font-bold">{formatNumberFa(paidAmt)} تومان</span>
+                    </div>
+                    {remAmt > 0 && (
+                      <div className="flex justify-between text-xs text-rose-700 font-bold">
+                        <span>مانده تسویه‌نشده:</span>
+                        <span>{formatNumberFa(remAmt)} تومان</span>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
               <div className="flex justify-between text-[11px] text-slate-500">
                 <span>معادل ارزی (دلار {formatNumberFa(order.usdRateSnapshot)} ت):</span>
                 <span className="font-bold">{formatUsd(totalUsd)}</span>

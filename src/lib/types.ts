@@ -247,6 +247,7 @@ export interface Order {
   discountToman: number;
   vatToman: number;
   totalToman: number;
+  paidToman: number;
   usdRateSnapshot: number;
   estimatedCostToman: number;
   estimatedProfitToman: number;
@@ -263,13 +264,62 @@ export interface BuyerSummary extends PublicUser {
   orderCount: number;
   totalSpentToman: number;
   totalBarrels: number;
+  balanceToman: number;
 }
 
 export interface SellerSummary extends PriceSource {
   purchaseCount: number;
   totalPurchasedToman: number;
   totalBarrelsPurchased: number;
+  balanceToman: number;
   latestQuoteRawPrice: number | null;
   latestQuoteCurrency: PriceCurrency | null;
   latestQuoteUnit: PriceUnit | null;
+}
+
+export type PartyType = "BUYER" | "SELLER" | "OTHER";
+
+export type LedgerEntryType =
+  | "DEBIT_RECEIVABLE"
+  | "CREDIT_PAYABLE"
+  | "RECEIPT_IN"
+  | "PAYMENT_OUT";
+
+export interface LedgerEntry {
+  id: number;
+  partyKey: string;
+  partyType: PartyType;
+  partyName: string;
+  partyPhone: string;
+  entryType: LedgerEntryType;
+  amountToman: number;
+  orderId: number | null;
+  orderNumber: string;
+  note: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface PartyAccountSummary {
+  partyKey: string;
+  partyType: PartyType;
+  partyName: string;
+  partyPhone: string;
+  salesCount: number;
+  purchasesCount: number;
+  totalReceivableToman: number;
+  totalPayableToman: number;
+  /** >0: بدهکار به ما (طلب ما) | <0: بستانکار از ما (بدهی ما) | 0: تسویه */
+  netBalanceToman: number;
+  lastActivityAt: string;
+}
+
+export interface LedgerSummary {
+  accounts: PartyAccountSummary[];
+  entries: LedgerEntry[];
+  totalDebtorsToman: number;
+  totalCreditorsToman: number;
+  debtorCount: number;
+  creditorCount: number;
+  netPositionToman: number;
 }

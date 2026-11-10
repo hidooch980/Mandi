@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireStaffUser } from "@/lib/api-helpers";
 import {
+  getLedgerSummary,
   getMarketConfig,
   listLatestPriceQuotes,
   listOrders,
@@ -16,7 +17,7 @@ export async function GET() {
   const auth = await requireStaffUser();
   if (auth.response) return auth.response;
 
-  const [config, sources, latestDieselQuotes, warehouses, products, trades] =
+  const [config, sources, latestDieselQuotes, warehouses, products, trades, ledger] =
     await Promise.all([
       getMarketConfig(),
       listPriceSources(),
@@ -24,6 +25,7 @@ export async function GET() {
       listWarehouses(),
       listProductsWithPricing(false),
       listOrders(),
+      getLedgerSummary(),
     ]);
 
   const snapshot = {
@@ -34,6 +36,7 @@ export async function GET() {
     warehouses,
     products,
     trades,
+    ledger,
   };
 
   return new NextResponse(JSON.stringify(snapshot, null, 2), {

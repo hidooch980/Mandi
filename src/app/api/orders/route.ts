@@ -41,6 +41,8 @@ export async function POST(req: Request) {
       destinationCity?: string;
       deliveryAddress?: string;
       paymentMethod?: string;
+      paymentStatus?: PaymentStatus;
+      paidAmountToman?: number;
       freightToman?: number;
       discountPercent?: number;
       customerId?: number;
@@ -169,18 +171,41 @@ export async function POST(req: Request) {
           ? "PROFORMA"
           : "PENDING";
 
-    const initialPayment: PaymentStatus =
-      tradeType === "PURCHASE" && body.receiveImmediately ? "PAID" : "UNPAID";
+    let initialPayment: PaymentStatus = "UNPAID";
+    let paidToman = 0;
+
+    if (staffUser) {
+      if (body.paymentStatus === "PAID") {
+        initialPayment = "PAID";
+        paidToman = economics.totalToman;
+      } else if (
+        body.paidAmountToman !== undefined &&
+        Number(body.paidAmountToman) > 0
+      ) {
+        paidToman = Math.min(
+          Math.round(Number(body.paidAmountToman)),
+          economics.totalToman
+        );
+        initialPayment =
+          paidToman >= economics.totalToman ? "PAID" : "PARTIAL";
+      } else if (body.paymentStatus === "UNPAID") {
+        initialPayment = "UNPAID";
+        paidToman = 0;
+      } else if (tradeType === "PURCHASE" && body.receiveImmediately) {
+        initialPayment = "PAID";
+        paidToman = economics.totalToman;
+      }
+    }
 
     const orderId = await db.transaction(async (tx) => {
       const orderRes = await tx.run(
         `INSERT INTO orders (
           order_number, trade_type, customer_id, customer_name, customer_phone, customer_company,
           destination_city, delivery_address, status, payment_status, payment_method,
-          subtotal_toman, freight_toman, discount_toman, vat_toman, total_toman,
+          subtotal_toman, freight_toman, discount_toman, vat_toman, total_toman, paid_toman,
           usd_rate_snapshot, estimated_cost_toman, estimated_profit_toman,
           driver_plate, waybill_number, notes, created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, ?)`,
         orderNumber,
         tradeType,
         customerId,
@@ -197,6 +222,7 @@ export async function POST(req: Request) {
         economics.discountToman,
         economics.vatToman,
         economics.totalToman,
+        paidToman,
         config.usdToToman,
         economics.estimatedCostToman,
         economics.estimatedProfitToman,

@@ -16,6 +16,7 @@ import { formatJalaliDate, formatNumberFa, formatUsd } from "@/lib/jalali";
 import { FUEL_LABELS } from "@/lib/pricing-engine";
 import type {
   DieselDiscoverySummary,
+  LedgerSummary,
   MarketConfig,
   Order,
   PriceHistoryPoint,
@@ -28,6 +29,7 @@ interface DashboardClientProps {
   history: PriceHistoryPoint[];
   products: Product[];
   orders: Order[];
+  ledgerSummary: LedgerSummary;
 }
 
 export function DashboardClient({
@@ -36,6 +38,7 @@ export function DashboardClient({
   history,
   products,
   orders,
+  ledgerSummary,
 }: DashboardClientProps) {
   const dieselBarrels = products
     .filter((p) => p.fuelType === "DIESEL")
@@ -143,6 +146,60 @@ export function DashboardClient({
           </div>
           <div className="text-[11px] text-slate-500 tabular-nums">
             فروش: {formatNumberFa(totalSalesToman)} | خرید: {formatNumberFa(totalPurchasesToman)}
+          </div>
+        </div>
+      </div>
+
+      {/* Accounts Receivable / Payable Summary */}
+      <div className="rounded-2xl bg-white border border-slate-200 p-5 space-y-3 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <h2 className="font-bold text-sm sm:text-base text-slate-900 flex items-center gap-2">
+            <Wallet className="w-4 h-4 text-sky-600" />
+            <span>وضعیت حساب‌های بدهکار و بستانکار</span>
+          </h2>
+          <Link
+            href="/ledger"
+            className="text-xs text-emerald-700 font-bold inline-flex items-center gap-1 hover:underline"
+          >
+            مشاهده و ثبت دریافت/پرداخت
+            <ArrowLeft className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs tabular-nums">
+          <div className="rounded-xl bg-emerald-50 border border-emerald-200/70 p-3.5">
+            <div className="text-emerald-700">
+              طلب ما از بدهکاران ({formatNumberFa(ledgerSummary.debtorCount)} نفر)
+            </div>
+            <div className="text-base font-extrabold text-emerald-900 mt-1">
+              {formatNumberFa(ledgerSummary.totalDebtorsToman)} تومان
+            </div>
+          </div>
+          <div className="rounded-xl bg-rose-50 border border-rose-200/70 p-3.5">
+            <div className="text-rose-700">
+              بدهی ما به بستانکاران ({formatNumberFa(ledgerSummary.creditorCount)} نفر)
+            </div>
+            <div className="text-base font-extrabold text-rose-900 mt-1">
+              {formatNumberFa(ledgerSummary.totalCreditorsToman)} تومان
+            </div>
+          </div>
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3.5">
+            <div className="text-slate-600">تراز خالص بدهکار و بستانکار</div>
+            <div
+              className={`text-base font-extrabold mt-1 ${
+                ledgerSummary.netPositionToman > 0
+                  ? "text-emerald-700"
+                  : ledgerSummary.netPositionToman < 0
+                    ? "text-rose-700"
+                    : "text-slate-900"
+              }`}
+            >
+              {ledgerSummary.netPositionToman > 0
+                ? "+"
+                : ledgerSummary.netPositionToman < 0
+                  ? "-"
+                  : ""}
+              {formatNumberFa(Math.abs(ledgerSummary.netPositionToman))} تومان
+            </div>
           </div>
         </div>
       </div>

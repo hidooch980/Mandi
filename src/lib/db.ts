@@ -3,15 +3,20 @@ import fs from "node:fs";
 import path from "node:path";
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import { Pool, type PoolClient } from "pg";
+import { buildPartyKey, computeLedgerSummary } from "./ledger.ts";
 import { hashPassword } from "./password.ts";
 import { normalizeIranPhone } from "./whatsapp-parser.ts";
 import type {
   BuyerSummary,
   FuelType,
+  LedgerEntry,
+  LedgerEntryType,
+  LedgerSummary,
   MarketConfig,
   Order,
   OrderItem,
   OrderStatus,
+  PartyType,
   PaymentStatus,
   PriceCurrency,
   PriceHistoryPoint,
@@ -482,6 +487,7 @@ async function initializeSchema(db: DbClient): Promise<void> {
       discount_toman ${num} NOT NULL DEFAULT 0,
       vat_toman ${num} NOT NULL DEFAULT 0,
       total_toman ${num} NOT NULL,
+      paid_toman ${num} NOT NULL DEFAULT 0,
       usd_rate_snapshot ${num} NOT NULL,
       estimated_cost_toman ${num} NOT NULL DEFAULT 0,
       estimated_profit_toman ${num} NOT NULL DEFAULT 0,
@@ -491,6 +497,21 @@ async function initializeSchema(db: DbClient): Promise<void> {
       created_by TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS ledger_entries (
+      id ${pk},
+      party_key TEXT NOT NULL,
+      party_type TEXT NOT NULL CHECK(party_type IN ('BUYER','SELLER','OTHER')) DEFAULT 'OTHER',
+      party_name TEXT NOT NULL,
+      party_phone TEXT NOT NULL DEFAULT '',
+      entry_type TEXT NOT NULL CHECK(entry_type IN ('DEBIT_RECEIVABLE','CREDIT_PAYABLE','RECEIPT_IN','PAYMENT_OUT')),
+      amount_toman ${num} NOT NULL,
+      order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+      order_number TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS order_items (
@@ -512,12 +533,13 @@ async function initializeSchema(db: DbClient): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_history_time ON price_history(recorded_at DESC);
     CREATE INDEX IF NOT EXISTS idx_orders_trade_time ON orders(trade_type, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_sms_logs_time ON sms_logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_ledger_party_time ON ledger_entries(party_key, created_at DESC);
   `);
 
-  // Safe migration for existing local SQLite databases missing is_sms_target
+  // Safe migrations for existing SQLite and PostgreSQL databases
   if (db.dialect === "sqlite") {
-    const cols = await db.all<{ name: string }>("PRAGMA table_info(price_sources)");
-    if (!cols.some((c) => c.name === "is_sms_target")) {
+    const srcCols = await db.all<{ name: string }>("PRAGMA table_info(price_sources)");
+    if (!srcCols.some((c) => c.name === "is_sms_target")) {
       await db.exec(
         "ALTER TABLE price_sources ADD COLUMN is_sms_target INTEGER NOT NULL DEFAULT 0;"
       );
@@ -525,9 +547,25 @@ async function initializeSchema(db: DbClient): Promise<void> {
         "UPDATE price_sources SET is_sms_target = 1 WHERE type = 'BROKER_PHONE';"
       );
     }
+
+    const orderCols = await db.all<{ name: string }>("PRAGMA table_info(orders)");
+    if (!orderCols.some((c) => c.name === "paid_toman")) {
+      await db.exec(
+        "ALTER TABLE orders ADD COLUMN paid_toman REAL NOT NULL DEFAULT 0;"
+      );
+      await db.exec(
+        "UPDATE orders SET paid_toman = total_toman WHERE payment_status = 'PAID' AND paid_toman = 0;"
+      );
+    }
   } else {
     await db.exec(
       "ALTER TABLE price_sources ADD COLUMN IF NOT EXISTS is_sms_target INTEGER NOT NULL DEFAULT 0;"
+    );
+    await db.exec(
+      "ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_toman DOUBLE PRECISION NOT NULL DEFAULT 0;"
+    );
+    await db.exec(
+      "UPDATE orders SET paid_toman = total_toman WHERE payment_status = 'PAID' AND paid_toman = 0;"
     );
   }
 
@@ -687,6 +725,7 @@ export async function resetToCleanDatabase(options?: {
 
   await db.transaction(async (tx) => {
     await tx.exec(`
+      DELETE FROM ledger_entries;
       DELETE FROM order_items;
       DELETE FROM orders;
       DELETE FROM sms_logs;
@@ -955,6 +994,7 @@ export async function listOrders(customerId?: number): Promise<Order[]> {
     discountToman: Number(o.discount_toman),
     vatToman: Number(o.vat_toman),
     totalToman: Number(o.total_toman),
+    paidToman: Number(o.paid_toman ?? 0),
     usdRateSnapshot: Number(o.usd_rate_snapshot),
     estimatedCostToman: Number(o.estimated_cost_toman),
     estimatedProfitToman: Number(o.estimated_profit_toman),
@@ -999,6 +1039,7 @@ export async function getOrderById(id: number): Promise<Order | null> {
     discountToman: Number(o.discount_toman),
     vatToman: Number(o.vat_toman),
     totalToman: Number(o.total_toman),
+    paidToman: Number(o.paid_toman ?? 0),
     usdRateSnapshot: Number(o.usd_rate_snapshot),
     estimatedCostToman: Number(o.estimated_cost_toman),
     estimatedProfitToman: Number(o.estimated_profit_toman),
@@ -1027,29 +1068,43 @@ export async function getOrderById(id: number): Promise<Order | null> {
 
 export async function listBuyersWithStats(): Promise<BuyerSummary[]> {
   const db = await getDb();
-  const rows = await db.all<Record<string, unknown>>(`
-    SELECT u.*,
-      COALESCE((SELECT COUNT(*) FROM orders o WHERE o.customer_id = u.id AND o.trade_type = 'SALE' AND o.status != 'CANCELLED'), 0) AS order_count,
-      COALESCE((SELECT SUM(o.total_toman) FROM orders o WHERE o.customer_id = u.id AND o.trade_type = 'SALE' AND o.status != 'CANCELLED'), 0) AS total_spent_toman,
-      COALESCE((SELECT SUM(oi.quantity_barrels) FROM order_items oi INNER JOIN orders o ON o.id = oi.order_id WHERE o.customer_id = u.id AND o.trade_type = 'SALE' AND o.status != 'CANCELLED'), 0) AS total_barrels
-    FROM users u
-    WHERE u.role = 'CUSTOMER'
-    ORDER BY total_spent_toman DESC, u.id DESC
-  `);
+  const [rows, summary] = await Promise.all([
+    db.all<Record<string, unknown>>(`
+      SELECT u.*,
+        COALESCE((SELECT COUNT(*) FROM orders o WHERE o.customer_id = u.id AND o.trade_type = 'SALE' AND o.status != 'CANCELLED'), 0) AS order_count,
+        COALESCE((SELECT SUM(o.total_toman) FROM orders o WHERE o.customer_id = u.id AND o.trade_type = 'SALE' AND o.status != 'CANCELLED'), 0) AS total_spent_toman,
+        COALESCE((SELECT SUM(oi.quantity_barrels) FROM order_items oi INNER JOIN orders o ON o.id = oi.order_id WHERE o.customer_id = u.id AND o.trade_type = 'SALE' AND o.status != 'CANCELLED'), 0) AS total_barrels
+      FROM users u
+      WHERE u.role = 'CUSTOMER'
+      ORDER BY total_spent_toman DESC, u.id DESC
+    `),
+    getLedgerSummary(),
+  ]);
 
-  return rows.map((r) => ({
-    ...mapUserRow(r),
-    orderCount: Number(r.order_count),
-    totalSpentToman: Number(r.total_spent_toman),
-    totalBarrels: Number(r.total_barrels),
-  }));
+  const balanceByKey = new Map<string, number>();
+  for (const acc of summary.accounts) {
+    balanceByKey.set(acc.partyKey, acc.netBalanceToman);
+  }
+
+  return rows.map((r) => {
+    const u = mapUserRow(r);
+    const key = buildPartyKey(u.name, u.phone);
+    return {
+      ...u,
+      orderCount: Number(r.order_count),
+      totalSpentToman: Number(r.total_spent_toman),
+      totalBarrels: Number(r.total_barrels),
+      balanceToman: balanceByKey.get(key) ?? 0,
+    };
+  });
 }
 
 export async function listSellersWithStats(): Promise<SellerSummary[]> {
-  const [sources, quotes, allOrders] = await Promise.all([
+  const [sources, quotes, allOrders, summary] = await Promise.all([
     listPriceSources(),
     listLatestPriceQuotes(true),
     listOrders(),
+    getLedgerSummary(),
   ]);
   const purchaseOrders = allOrders.filter(
     (o) => o.tradeType === "PURCHASE" && o.status !== "CANCELLED"
@@ -1058,6 +1113,11 @@ export async function listSellersWithStats(): Promise<SellerSummary[]> {
   const quoteBySourceId = new Map<number, PriceQuoteRecord>();
   for (const q of quotes) {
     quoteBySourceId.set(q.sourceId, q);
+  }
+
+  const balanceByKey = new Map<string, number>();
+  for (const acc of summary.accounts) {
+    balanceByKey.set(acc.partyKey, acc.netBalanceToman);
   }
 
   return sources.map((src) => {
@@ -1082,15 +1142,220 @@ export async function listSellersWithStats(): Promise<SellerSummary[]> {
       0
     );
     const latestQuote = quoteBySourceId.get(src.id);
+    const key = buildPartyKey(src.name, src.contactInfo);
 
     return {
       ...src,
       purchaseCount,
       totalPurchasedToman,
       totalBarrelsPurchased,
+      balanceToman: balanceByKey.get(key) ?? 0,
       latestQuoteRawPrice: latestQuote ? latestQuote.rawPrice : null,
       latestQuoteCurrency: latestQuote ? latestQuote.currency : null,
       latestQuoteUnit: latestQuote ? latestQuote.unit : null,
     };
   });
+}
+
+// ==========================================
+// Accounts Receivable / Payable (بدهکار و بستانکار)
+// ==========================================
+
+export async function listLedgerEntries(limit = 150): Promise<LedgerEntry[]> {
+  const db = await getDb();
+  const rows = await db.all<Record<string, unknown>>(
+    "SELECT * FROM ledger_entries ORDER BY id DESC LIMIT ?",
+    limit
+  );
+  return rows.map((r) => ({
+    id: Number(r.id),
+    partyKey: String(r.party_key),
+    partyType: r.party_type as PartyType,
+    partyName: String(r.party_name),
+    partyPhone: String(r.party_phone ?? ""),
+    entryType: r.entry_type as LedgerEntryType,
+    amountToman: Number(r.amount_toman),
+    orderId: r.order_id !== null ? Number(r.order_id) : null,
+    orderNumber: String(r.order_number ?? ""),
+    note: String(r.note ?? ""),
+    createdBy: String(r.created_by ?? ""),
+    createdAt: String(r.created_at),
+  }));
+}
+
+export async function getLedgerSummary(): Promise<LedgerSummary> {
+  const [orders, entries] = await Promise.all([
+    listOrders(),
+    listLedgerEntries(300),
+  ]);
+  return computeLedgerSummary(orders, entries);
+}
+
+export async function recordLedgerEntry(params: {
+  partyType: PartyType;
+  partyName: string;
+  partyPhone: string;
+  entryType: LedgerEntryType;
+  amountToman: number;
+  note?: string;
+  createdBy: string;
+}): Promise<LedgerSummary> {
+  const db = await getDb();
+  const cleanName = params.partyName.trim();
+  const cleanPhone = params.partyPhone.trim();
+  const partyKey = buildPartyKey(cleanName, cleanPhone);
+  const amount = Math.round(params.amountToman);
+  const nowIso = new Date().toISOString();
+
+  await db.transaction(async (tx) => {
+    const insertSql = `
+      INSERT INTO ledger_entries (
+        party_key, party_type, party_name, party_phone,
+        entry_type, amount_toman, order_id, order_number, note, created_by, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    if (
+      params.entryType === "RECEIPT_IN" ||
+      params.entryType === "PAYMENT_OUT"
+    ) {
+      const targetTradeType: TradeType =
+        params.entryType === "RECEIPT_IN" ? "SALE" : "PURCHASE";
+
+      const candidateOrders = await tx.all<Record<string, unknown>>(
+        `SELECT id, order_number, customer_name, customer_phone, total_toman, paid_toman, payment_status
+         FROM orders
+         WHERE trade_type = ? AND status != 'CANCELLED' AND paid_toman < total_toman
+         ORDER BY id ASC`,
+        targetTradeType
+      );
+
+      let remaining = amount;
+      for (const ord of candidateOrders) {
+        if (remaining <= 0) break;
+        const ordKey = buildPartyKey(
+          String(ord.customer_name),
+          String(ord.customer_phone)
+        );
+        if (ordKey !== partyKey) continue;
+
+        const total = Math.round(Number(ord.total_toman));
+        const paid =
+          Number(ord.paid_toman ?? 0) > 0
+            ? Math.round(Number(ord.paid_toman))
+            : ord.payment_status === "PAID"
+              ? total
+              : 0;
+        const owed = Math.max(total - paid, 0);
+        if (owed <= 0) continue;
+
+        const applied = Math.min(remaining, owed);
+        const nextPaid = Math.min(paid + applied, total);
+        const nextPaymentStatus: PaymentStatus =
+          nextPaid >= total ? "PAID" : nextPaid > 0 ? "PARTIAL" : "UNPAID";
+
+        await tx.run(
+          "UPDATE orders SET paid_toman = ?, payment_status = ?, updated_at = ? WHERE id = ?",
+          nextPaid,
+          nextPaymentStatus,
+          nowIso,
+          Number(ord.id)
+        );
+
+        await tx.run(
+          insertSql,
+          partyKey,
+          params.partyType,
+          cleanName,
+          cleanPhone,
+          params.entryType,
+          applied,
+          Number(ord.id),
+          String(ord.order_number),
+          (params.note ?? "").trim() ||
+            `تسویه سند ${String(ord.order_number)}`,
+          params.createdBy,
+          nowIso
+        );
+
+        remaining -= applied;
+      }
+
+      if (remaining > 0) {
+        await tx.run(
+          insertSql,
+          partyKey,
+          params.partyType,
+          cleanName,
+          cleanPhone,
+          params.entryType,
+          remaining,
+          null,
+          "",
+          (params.note ?? "").trim(),
+          params.createdBy,
+          nowIso
+        );
+      }
+    } else {
+      await tx.run(
+        insertSql,
+        partyKey,
+        params.partyType,
+        cleanName,
+        cleanPhone,
+        params.entryType,
+        amount,
+        null,
+        "",
+        (params.note ?? "").trim(),
+        params.createdBy,
+        nowIso
+      );
+    }
+  });
+
+  return getLedgerSummary();
+}
+
+export async function deleteLedgerEntry(entryId: number): Promise<boolean> {
+  const db = await getDb();
+  let deleted = false;
+
+  await db.transaction(async (tx) => {
+    const entry = await tx.get<Record<string, unknown>>(
+      "SELECT * FROM ledger_entries WHERE id = ?",
+      entryId
+    );
+    if (!entry) return;
+
+    if (entry.order_id !== null) {
+      const orderId = Number(entry.order_id);
+      const ord = await tx.get<Record<string, unknown>>(
+        "SELECT total_toman, paid_toman FROM orders WHERE id = ?",
+        orderId
+      );
+      if (ord) {
+        const nextPaid = Math.max(
+          0,
+          Math.round(Number(ord.paid_toman ?? 0) - Number(entry.amount_toman))
+        );
+        const total = Math.round(Number(ord.total_toman));
+        const nextPaymentStatus: PaymentStatus =
+          nextPaid >= total ? "PAID" : nextPaid > 0 ? "PARTIAL" : "UNPAID";
+        await tx.run(
+          "UPDATE orders SET paid_toman = ?, payment_status = ?, updated_at = ? WHERE id = ?",
+          nextPaid,
+          nextPaymentStatus,
+          new Date().toISOString(),
+          orderId
+        );
+      }
+    }
+
+    const res = await tx.run("DELETE FROM ledger_entries WHERE id = ?", entryId);
+    deleted = res.changes > 0;
+  });
+
+  return deleted;
 }

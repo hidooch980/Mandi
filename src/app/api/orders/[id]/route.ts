@@ -50,13 +50,32 @@ export async function PATCH(
     const body = (await req.json()) as Partial<{
       status: OrderStatus;
       paymentStatus: PaymentStatus;
+      paidAmountToman: number;
       driverPlate: string;
       waybillNumber: string;
       notes: string;
     }>;
 
     const nextStatus = body.status ?? existing.status;
-    const nextPayment = body.paymentStatus ?? existing.paymentStatus;
+    let nextPaid = existing.paidToman;
+    let nextPayment = body.paymentStatus ?? existing.paymentStatus;
+
+    if (body.paidAmountToman !== undefined) {
+      nextPaid = Math.max(
+        0,
+        Math.min(Math.round(Number(body.paidAmountToman)), Math.round(existing.totalToman))
+      );
+      nextPayment =
+        nextPaid >= existing.totalToman
+          ? "PAID"
+          : nextPaid > 0
+            ? "PARTIAL"
+            : "UNPAID";
+    } else if (body.paymentStatus === "PAID") {
+      nextPaid = Math.round(existing.totalToman);
+    } else if (body.paymentStatus === "UNPAID") {
+      nextPaid = 0;
+    }
     const db = await getDb();
     const now = new Date().toISOString();
 
@@ -145,6 +164,7 @@ export async function PATCH(
         `UPDATE orders SET
           status = ?,
           payment_status = ?,
+          paid_toman = ?,
           driver_plate = ?,
           waybill_number = ?,
           notes = ?,
@@ -152,6 +172,7 @@ export async function PATCH(
         WHERE id = ?`,
         nextStatus,
         nextPayment,
+        nextPaid,
         body.driverPlate !== undefined ? body.driverPlate.trim() : existing.driverPlate,
         body.waybillNumber !== undefined
           ? body.waybillNumber.trim()

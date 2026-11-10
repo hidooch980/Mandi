@@ -66,11 +66,15 @@ export function OrdersClient({
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [freightToman, setFreightToman] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState("حواله بانکی ساتنا");
+  const [newPaymentStatus, setNewPaymentStatus] =
+    useState<PaymentStatus>("UNPAID");
+  const [newPaidAmount, setNewPaidAmount] = useState<string>("0");
   const [notes, setNotes] = useState("");
 
   // Edit Trade Form
   const [editStatus, setEditStatus] = useState<OrderStatus>("PROFORMA");
   const [editPayment, setEditPayment] = useState<PaymentStatus>("UNPAID");
+  const [editPaidAmount, setEditPaidAmount] = useState<string>("0");
   const [editPlate, setEditPlate] = useState("");
   const [editWaybill, setEditWaybill] = useState("");
   const [editNotes, setEditNotes] = useState("");
@@ -132,6 +136,8 @@ export function OrdersClient({
       setCounterpartyCompany(firstCust?.companyName ?? "");
       setCustomUnitPrice("");
     }
+    setNewPaymentStatus("UNPAID");
+    setNewPaidAmount("0");
   }
 
   function handleSelectSeller(sid: string) {
@@ -185,6 +191,11 @@ export function OrdersClient({
           deliveryAddress,
           freightToman,
           paymentMethod,
+          paymentStatus: newPaymentStatus,
+          paidAmountToman:
+            newPaymentStatus === "PARTIAL"
+              ? Math.max(0, Number(newPaidAmount || 0))
+              : undefined,
           notes,
         }),
       });
@@ -205,6 +216,15 @@ export function OrdersClient({
     setEditingOrder(order);
     setEditStatus(order.status);
     setEditPayment(order.paymentStatus);
+    setEditPaidAmount(
+      String(
+        order.paidToman > 0
+          ? order.paidToman
+          : order.paymentStatus === "PAID"
+            ? order.totalToman
+            : 0
+      )
+    );
     setEditPlate(order.driverPlate);
     setEditWaybill(order.waybillNumber);
     setEditNotes(order.notes);
@@ -221,6 +241,7 @@ export function OrdersClient({
         body: JSON.stringify({
           status: editStatus,
           paymentStatus: editPayment,
+          paidAmountToman: Number(editPaidAmount || 0),
           driverPlate: editPlate,
           waybillNumber: editWaybill,
           notes: editNotes,
@@ -250,6 +271,12 @@ export function OrdersClient({
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Link
+            href="/ledger"
+            className="px-4 py-2.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs sm:text-sm font-bold inline-flex items-center gap-1.5"
+          >
+            وضعیت بدهکار و بستانکار
+          </Link>
           <button
             type="button"
             onClick={() => openNewTrade("PURCHASE")}
@@ -387,6 +414,30 @@ export function OrdersClient({
                       <div>
                         <PaymentStatusBadge status={o.paymentStatus} />
                       </div>
+                      {o.status !== "CANCELLED" &&
+                        Math.max(o.totalToman - (o.paidToman > 0 ? o.paidToman : o.paymentStatus === "PAID" ? o.totalToman : 0), 0) > 0 && (
+                          <div
+                            className={`text-[10px] font-bold tabular-nums ${
+                              o.tradeType === "SALE"
+                                ? "text-emerald-700"
+                                : "text-rose-700"
+                            }`}
+                          >
+                            {o.tradeType === "SALE" ? "بدهکار: " : "بستانکار: "}
+                            {formatNumberFa(
+                              Math.max(
+                                o.totalToman -
+                                  (o.paidToman > 0
+                                    ? o.paidToman
+                                    : o.paymentStatus === "PAID"
+                                      ? o.totalToman
+                                      : 0),
+                                0
+                              )
+                            )}{" "}
+                            ت
+                          </div>
+                        )}
                     </td>
                     <td className="py-3.5 px-3 text-[11px] text-slate-600">
                       {o.waybillNumber || o.driverPlate ? (
@@ -616,6 +667,43 @@ export function OrdersClient({
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
+                  وضعیت پرداخت اولیه
+                </label>
+                <select
+                  value={newPaymentStatus}
+                  onChange={(e) => {
+                    const val = e.target.value as PaymentStatus;
+                    setNewPaymentStatus(val);
+                    if (val === "PAID" && preview) {
+                      setNewPaidAmount(String(preview.totalToman));
+                    } else if (val === "UNPAID") {
+                      setNewPaidAmount("0");
+                    }
+                  }}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                >
+                  <option value="UNPAID">تسویه‌نشده / نسیه (بدهکار یا بستانکار)</option>
+                  <option value="PARTIAL">پرداخت جزئی (پیش‌پرداخت)</option>
+                  <option value="PAID">پرداخت کامل (تسویه نقدی)</option>
+                </select>
+              </div>
+              {newPaymentStatus === "PARTIAL" && (
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    مبلغ پرداختی فعلی (تومان)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    dir="ltr"
+                    value={newPaidAmount}
+                    onChange={(e) => setNewPaidAmount(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
                   روش تسویه
                 </label>
                 <input
@@ -723,13 +811,42 @@ export function OrdersClient({
                 </label>
                 <select
                   value={editPayment}
-                  onChange={(e) => setEditPayment(e.target.value as PaymentStatus)}
+                  onChange={(e) => {
+                    const val = e.target.value as PaymentStatus;
+                    setEditPayment(val);
+                    if (val === "PAID") {
+                      setEditPaidAmount(String(editingOrder.totalToman));
+                    } else if (val === "UNPAID") {
+                      setEditPaidAmount("0");
+                    }
+                  }}
                   className="w-full rounded-xl border border-slate-300 px-3 py-2"
                 >
                   <option value="UNPAID">تسویه‌نشده</option>
-                  <option value="PARTIAL">پیش‌پرداخت</option>
+                  <option value="PARTIAL">پیش‌پرداخت / پرداخت جزئی</option>
                   <option value="PAID">پرداخت کامل</option>
                 </select>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  مبلغ دریافت / پرداخت‌شده تا الان (تومان)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={editingOrder.totalToman}
+                  dir="ltr"
+                  value={editPaidAmount}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEditPaidAmount(val);
+                    const numVal = Number(val || 0);
+                    if (numVal >= editingOrder.totalToman) setEditPayment("PAID");
+                    else if (numVal > 0) setEditPayment("PARTIAL");
+                    else setEditPayment("UNPAID");
+                  }}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 font-bold"
+                />
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">

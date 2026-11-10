@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -9,10 +10,13 @@ import {
   FileText,
   Fuel,
   LogOut,
+  Menu,
   MessageSquare,
   Settings,
   ShoppingBag,
   Users,
+  Wallet,
+  X,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { formatNumberFa } from "@/lib/jalali";
@@ -27,6 +31,7 @@ interface AppShellProps {
 export function AppShell({ user, usdToToman, children }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isStaff = user.role === "ADMIN" || user.role === "SALES";
 
   const staffNav = [
@@ -34,6 +39,7 @@ export function AppShell({ user, usdToToman, children }: AppShellProps) {
     { href: "/discovery", label: "کشف قیمت گازوئیل", icon: Compass },
     { href: "/sms", label: "پیامک ساعتی", icon: MessageSquare },
     { href: "/orders", label: "خرید و فروش", icon: FileText },
+    { href: "/ledger", label: "بدهکار و بستانکار", icon: Wallet },
     { href: "/inventory", label: "انبار بنزین و گازوئیل", icon: Boxes },
     { href: "/customers", label: "فروشندگان و خریداران", icon: Users },
     { href: "/settings", label: "تنظیمات", icon: Settings },
@@ -44,7 +50,15 @@ export function AppShell({ user, usdToToman, children }: AppShellProps) {
   ];
 
   const navItems = isStaff ? staffNav : customerNav;
-  const mobileNav = navItems.slice(0, 5);
+  const mobileNav = isStaff
+    ? [
+        staffNav[0], // داشبورد
+        staffNav[1], // کشف قیمت
+        staffNav[3], // خرید و فروش
+        staffNav[4], // بدهکار و بستانکار
+        staffNav[7], // تنظیمات
+      ]
+    : customerNav;
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -132,6 +146,16 @@ export function AppShell({ user, usdToToman, children }: AppShellProps) {
       <div className="flex-1 md:mr-64 flex flex-col min-h-screen pb-20 md:pb-0">
         <header className="no-print md:hidden sticky top-0 z-20 bg-slate-950 text-white px-4 py-3 flex items-center justify-between shadow-md">
           <div className="flex items-center gap-2.5">
+            {isStaff && (
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                aria-label="منو"
+                className="p-2 rounded-lg bg-slate-900 text-slate-200 cursor-pointer"
+              >
+                <Menu className="w-4 h-4" />
+              </button>
+            )}
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-amber-500 flex items-center justify-center">
               <Fuel className="w-4 h-4 text-slate-950" />
             </div>
@@ -151,7 +175,7 @@ export function AppShell({ user, usdToToman, children }: AppShellProps) {
               type="button"
               onClick={handleLogout}
               aria-label="خروج"
-              className="p-2 rounded-lg bg-slate-900 text-slate-300"
+              className="p-2 rounded-lg bg-slate-900 text-slate-300 cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -163,8 +187,58 @@ export function AppShell({ user, usdToToman, children }: AppShellProps) {
         </main>
       </div>
 
+      {/* Mobile Full Navigation Drawer */}
+      {mobileMenuOpen && (
+        <div className="no-print md:hidden fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex">
+          <div className="w-72 max-w-[85vw] bg-slate-950 text-slate-100 h-full border-l border-slate-800 flex flex-col p-4 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <span className="font-extrabold text-sm text-white">منوی سامانه</span>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-1.5 rounded-lg bg-slate-900 text-slate-300 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <nav className="flex-1 space-y-1 overflow-y-auto">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const active =
+                  pathname === item.href ||
+                  (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition ${
+                      active
+                        ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                        : "text-slate-300 hover:bg-slate-900 hover:text-white"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+            <ThemeToggle />
+          </div>
+          <div
+            className="flex-1"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        </div>
+      )}
+
       <nav className="no-print md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 safe-bottom shadow-[0_-4px_20px_rgba(15,23,42,0.08)]">
-        <div className="grid grid-cols-5 max-w-lg mx-auto">
+        <div
+          className={`grid max-w-lg mx-auto ${
+            mobileNav.length === 1 ? "grid-cols-1" : "grid-cols-5"
+          }`}
+        >
           {mobileNav.map((item) => {
             const Icon = item.icon;
             const active =

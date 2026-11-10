@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Search, Store, UserCheck, Users } from "lucide-react";
+import Link from "next/link";
+import { Plus, Search, Store, UserCheck, Users, Wallet } from "lucide-react";
 import { formatJalaliDate, formatNumberFa } from "@/lib/jalali";
 import { SOURCE_TYPE_LABELS } from "@/lib/pricing-engine";
 import type { BuyerSummary, PriceSourceType, SellerSummary } from "@/lib/types";
@@ -161,6 +162,13 @@ export function CustomersClient({
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Link
+            href="/ledger"
+            className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-bold inline-flex items-center gap-1.5"
+          >
+            <Wallet className="w-4 h-4" />
+            بدهکار و بستانکار
+          </Link>
           <button
             type="button"
             onClick={() => {
@@ -270,6 +278,7 @@ export function CustomersClient({
                   <th className="py-3 px-3">تعداد خرید از ما</th>
                   <th className="py-3 px-3">مجموع بشکه / گالن</th>
                   <th className="py-3 px-3">جمع مبلغ خریداری‌شده</th>
+                  <th className="py-3 px-3">مانده بدهکار/بستانکار</th>
                   <th className="py-3 px-3">تاریخ ثبت</th>
                 </tr>
               </thead>
@@ -297,6 +306,19 @@ export function CustomersClient({
                     <td className="py-3.5 px-3 font-extrabold text-slate-900 tabular-nums">
                       {formatNumberFa(b.totalSpentToman)} ت
                     </td>
+                    <td className="py-3.5 px-3 tabular-nums">
+                      {b.balanceToman > 0 ? (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
+                          بدهکار: {formatNumberFa(b.balanceToman)} ت
+                        </span>
+                      ) : b.balanceToman < 0 ? (
+                        <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-bold">
+                          بستانکار: {formatNumberFa(Math.abs(b.balanceToman))} ت
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">تسویه</span>
+                      )}
+                    </td>
                     <td className="py-3.5 px-3 text-slate-500 tabular-nums">
                       {formatJalaliDate(b.createdAt)}
                     </td>
@@ -304,7 +326,7 @@ export function CustomersClient({
                 ))}
                 {filteredBuyers.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-slate-400">
+                    <td colSpan={7} className="py-10 text-center text-slate-400">
                       خریداری با این مشخصات پیدا نشد.
                     </td>
                   </tr>
@@ -327,6 +349,7 @@ export function CustomersClient({
                   <th className="py-3 px-3">آخرین نرخ استعلام</th>
                   <th className="py-3 px-3">تعداد خرید ما</th>
                   <th className="py-3 px-3">حجم خرید و مبلغ</th>
+                  <th className="py-3 px-3">مانده بدهکار/بستانکار</th>
                   <th className="py-3 px-3">پیامک ساعتی / وضعیت</th>
                 </tr>
               </thead>
@@ -371,6 +394,19 @@ export function CustomersClient({
                         {formatNumberFa(s.totalBarrelsPurchased)} بشکه/واحد
                       </div>
                     </td>
+                    <td className="py-3.5 px-3 tabular-nums">
+                      {s.balanceToman < 0 ? (
+                        <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-bold">
+                          بستانکار: {formatNumberFa(Math.abs(s.balanceToman))} ت
+                        </span>
+                      ) : s.balanceToman > 0 ? (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
+                          بدهکار: {formatNumberFa(s.balanceToman)} ت
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">تسویه</span>
+                      )}
+                    </td>
                     <td className="py-3.5 px-3">
                       <div className="flex flex-wrap gap-1.5">
                         <button
@@ -407,7 +443,7 @@ export function CustomersClient({
                 ))}
                 {filteredSellers.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-slate-400">
+                    <td colSpan={7} className="py-10 text-center text-slate-400">
                       فروشنده‌ای با این مشخصات پیدا نشد.
                     </td>
                   </tr>
