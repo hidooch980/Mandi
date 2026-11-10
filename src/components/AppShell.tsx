@@ -14,6 +14,7 @@ import {
   ShoppingBag,
   Users,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { formatNumberFa } from "@/lib/jalali";
 import type { PublicUser } from "@/lib/types";
 
@@ -91,7 +92,9 @@ export function AppShell({ user, usdToToman, children }: AppShellProps) {
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-800/80 space-y-3">
+        <div className="p-4 border-t border-slate-800/80 space-y-2.5">
+          <ThemeToggle />
+
           {usdToToman ? (
             <div className="rounded-xl bg-slate-900 px-3 py-2 flex items-center justify-between text-xs">
               <span className="text-slate-400">نرخ دلار مبنا</span>
@@ -143,6 +146,7 @@ export function AppShell({ user, usdToToman, children }: AppShellProps) {
                 دلار: {formatNumberFa(usdToToman)}
               </span>
             ) : null}
+            <ThemeToggle compact />
             <button
               type="button"
               onClick={handleLogout}

@@ -36,13 +36,35 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+const themeInitScript = `
+(function(){
+  try {
+    var t = localStorage.getItem('petronabz_theme');
+    if (t !== 'light') {
+      document.documentElement.classList.add('dark');
+      document.documentElement.style.colorScheme = 'dark';
+    } else {
+      document.documentElement.style.colorScheme = 'light';
+    }
+  } catch (e) {}
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fa" dir="rtl" className={vazirmatn.variable}>
+    <html
+      lang="fa"
+      dir="rtl"
+      suppressHydrationWarning
+      className={vazirmatn.variable}
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-screen antialiased selection:bg-amber-200 selection:text-slate-900">
         {children}
         <PwaManager />

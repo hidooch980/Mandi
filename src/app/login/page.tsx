@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Fuel, KeyRound, Shield } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -59,7 +60,8 @@ export default function LoginPage() {
             <ArrowRight className="w-4 h-4" />
             بازگشت به صفحه اصلی
           </Link>
-          <div className="flex items-center gap-2 text-white font-bold text-sm">
+          <div className="flex items-center gap-2.5 text-white font-bold text-sm">
+            <ThemeToggle compact />
             <Fuel className="w-4 h-4 text-amber-400" />
             <span>پترونبض</span>
           </div>

@@ -79,7 +79,7 @@ export function PriceHistoryChart({
                   x2={width - padX}
                   y1={y}
                   y2={y}
-                  stroke="#e2e8f0"
+                  className="stroke-slate-200 dark:stroke-slate-700"
                   strokeDasharray="4 4"
                 />
                 <text
@@ -87,7 +87,7 @@ export function PriceHistoryChart({
                   y={y + 4}
                   textAnchor="end"
                   fontSize="10"
-                  fill="#64748b"
+                  className="fill-slate-500 dark:fill-slate-400"
                 >
                   {formatNumberFa(Math.round(val / 1_000_000), 2)}م
                 </text>
@@ -125,7 +125,7 @@ export function PriceHistoryChart({
                     y={height - 6}
                     textAnchor="middle"
                     fontSize="10"
-                    fill="#64748b"
+                    className="fill-slate-500 dark:fill-slate-400"
                   >
                     {formatJalaliDate(p.recordedAt)}
                   </text>
@@ -197,7 +197,7 @@ export function SourceBreakdownChart({
               <div className="w-full h-3.5 bg-slate-100 rounded-full overflow-hidden flex">
                 <div
                   style={{ width: `${basePct}%` }}
-                  className="bg-slate-800 h-full"
+                  className="bg-slate-800 dark:bg-emerald-500 h-full"
                   title={`پایه: ${formatNumberFa(q.basePerBarrelToman)}`}
                 />
                 {packPct > 0 && (

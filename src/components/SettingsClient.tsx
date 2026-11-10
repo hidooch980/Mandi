@@ -7,16 +7,29 @@ import {
   KeyRound,
   Laptop,
   Settings,
+  Shield,
   Smartphone,
   Trash2,
+  UserPlus,
+  Users,
 } from "lucide-react";
 import { SAMPLE_IMPORT_CSV } from "@/lib/csv-importer";
-import type { MarketConfig } from "@/lib/types";
+import type { MarketConfig, PublicUser, UserRole } from "@/lib/types";
+
+const ROLE_LABELS: Record<UserRole, string> = {
+  ADMIN: "مدیر کل",
+  SALES: "همکار فروش و استعلام",
+  CUSTOMER: "مشتری / پرتال خرید",
+};
 
 export function SettingsClient({
   initialConfig,
+  currentUser,
+  initialUsers,
 }: {
   initialConfig: MarketConfig;
+  currentUser: PublicUser;
+  initialUsers: PublicUser[];
 }) {
   const [cfg, setCfg] = useState<MarketConfig>(initialConfig);
   const [busy, setBusy] = useState(false);
@@ -30,6 +43,19 @@ export function SettingsClient({
   );
   const [resetBusy, setResetBusy] = useState(false);
   const [resetMsg, setResetMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
+    null
+  );
+
+  // Admin Account Management State
+  const [users, setUsers] = useState<PublicUser[]>(initialUsers);
+  const [uName, setUName] = useState("");
+  const [uPhone, setUPhone] = useState("");
+  const [uPassword, setUPassword] = useState("");
+  const [uRole, setURole] = useState<UserRole>("SALES");
+  const [uCompany, setUCompany] = useState("");
+  const [uCity, setUCity] = useState("تهران");
+  const [userBusy, setUserBusy] = useState(false);
+  const [userMsg, setUserMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
     null
   );
   const [appVersion, setAppVersion] = useState<{
@@ -392,7 +418,323 @@ export function SettingsClient({
         </div>
       </form>
 
-      <div className="rounded-2xl bg-rose-50/70 border border-rose-200 p-5 space-y-3">
+      {currentUser.role === "ADMIN" && (
+        <div className="rounded-2xl bg-white border border-slate-200 p-5 space-y-5 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <h2 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+              <Users className="w-4 h-4 text-sky-600" />
+              <span>مدیریت کاربران و افزودن اکانت جدید</span>
+            </h2>
+            <span className="text-[11px] text-slate-500">
+              {users.length} اکانت ثبت‌شده در سامانه
+            </span>
+          </div>
+
+          {userMsg && (
+            <div
+              className={`rounded-xl border px-3.5 py-2.5 text-xs font-semibold ${
+                userMsg.type === "ok"
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                  : "bg-rose-50 border-rose-200 text-rose-700"
+              }`}
+            >
+              {userMsg.text}
+            </div>
+          )}
+
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setUserBusy(true);
+              setUserMsg(null);
+              try {
+                const res = await fetch("/api/admin/users", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    name: uName,
+                    phone: uPhone,
+                    password: uPassword,
+                    role: uRole,
+                    companyName: uCompany,
+                    city: uCity,
+                  }),
+                });
+                const data = await res.json();
+                if (!res.ok || !data.ok) {
+                  setUserMsg({
+                    type: "err",
+                    text: data.error || "خطا در ایجاد اکانت",
+                  });
+                  return;
+                }
+                setUsers(data.users);
+                setUName("");
+                setUPhone("");
+                setUPassword("");
+                setUCompany("");
+                setUserMsg({
+                  type: "ok",
+                  text: "اکانت جدید با موفقیت ساخته شد و الان با شماره و رمز قابل ورود است.",
+                });
+              } finally {
+                setUserBusy(false);
+              }
+            }}
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs rounded-xl bg-slate-50 border border-slate-200 p-4"
+          >
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                نام و نام خانوادگی *
+              </label>
+              <input
+                required
+                value={uName}
+                onChange={(e) => setUName(e.target.value)}
+                placeholder="مثلاً: رضا محمدی"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                شماره موبایل ورود *
+              </label>
+              <input
+                required
+                dir="ltr"
+                value={uPhone}
+                onChange={(e) => setUPhone(e.target.value)}
+                placeholder="09123456789"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                رمز عبور ورود (حداقل ۶ رقم) *
+              </label>
+              <input
+                required
+                type="password"
+                dir="ltr"
+                value={uPassword}
+                onChange={(e) => setUPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                سطح دسترسی
+              </label>
+              <select
+                value={uRole}
+                onChange={(e) => setURole(e.target.value as UserRole)}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2"
+              >
+                <option value="SALES">همکار فروش و استعلام</option>
+                <option value="ADMIN">مدیر کل (دسترسی کامل)</option>
+                <option value="CUSTOMER">مشتری (پرتال ثبت سفارش)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                شرکت / عنوان (اختیاری)
+              </label>
+              <input
+                value={uCompany}
+                onChange={(e) => setUCompany(e.target.value)}
+                placeholder="نام مجموعه"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2"
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <label className="block font-semibold text-slate-700 mb-1">
+                  شهر
+                </label>
+                <input
+                  value={uCity}
+                  onChange={(e) => setUCity(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={userBusy}
+                className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-xs inline-flex items-center gap-1.5 shrink-0 cursor-pointer h-[38px]"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>{userBusy ? "در حال ثبت..." : "افزودن اکانت"}</span>
+              </button>
+            </div>
+          </form>
+
+          <div className="space-y-2">
+            {users.map((u) => {
+              const isSelf = u.id === currentUser.id;
+              return (
+                <div
+                  key={u.id}
+                  className="rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                >
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <Shield
+                      className={`w-4 h-4 shrink-0 ${
+                        u.role === "ADMIN"
+                          ? "text-emerald-600"
+                          : u.role === "SALES"
+                            ? "text-amber-600"
+                            : "text-sky-600"
+                      }`}
+                    />
+                    <span className="font-bold text-slate-900">{u.name}</span>
+                    {isSelf && (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                        شما
+                      </span>
+                    )}
+                    <span
+                      dir="ltr"
+                      className="text-slate-600 font-mono tabular-nums"
+                    >
+                      {u.phone}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        u.role === "ADMIN"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : u.role === "SALES"
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-sky-100 text-sky-800"
+                      }`}
+                    >
+                      {ROLE_LABELS[u.role]}
+                    </span>
+                    {!u.isActive && (
+                      <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">
+                        غیرفعال
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      disabled={userBusy}
+                      onClick={async () => {
+                        const pwd = window.prompt(
+                          `رمز عبور جدید برای «${u.name}» (حداقل ۶ کاراکتر):`
+                        );
+                        if (!pwd || pwd.trim().length < 6) return;
+                        setUserBusy(true);
+                        setUserMsg(null);
+                        try {
+                          const res = await fetch(`/api/admin/users/${u.id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ newPassword: pwd.trim() }),
+                          });
+                          const data = await res.json();
+                          if (res.ok && data.ok) {
+                            setUsers(data.users);
+                            setUserMsg({
+                              type: "ok",
+                              text: `رمز عبور «${u.name}» تغییر یافت.`,
+                            });
+                          } else {
+                            setUserMsg({
+                              type: "err",
+                              text: data.error || "خطا در تغییر رمز",
+                            });
+                          }
+                        } finally {
+                          setUserBusy(false);
+                        }
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-[11px] font-semibold text-slate-700 cursor-pointer"
+                    >
+                      تغییر رمز
+                    </button>
+
+                    {!isSelf && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={userBusy}
+                          onClick={async () => {
+                            setUserBusy(true);
+                            setUserMsg(null);
+                            try {
+                              const res = await fetch(`/api/admin/users/${u.id}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ isActive: !u.isActive }),
+                              });
+                              const data = await res.json();
+                              if (res.ok && data.ok) setUsers(data.users);
+                              else
+                                setUserMsg({
+                                  type: "err",
+                                  text: data.error || "خطا در تغییر وضعیت",
+                                });
+                            } finally {
+                              setUserBusy(false);
+                            }
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-[11px] font-semibold text-slate-700 cursor-pointer"
+                        >
+                          {u.isActive ? "مسدود" : "فعال‌سازی"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={userBusy}
+                          onClick={async () => {
+                            if (
+                              !window.confirm(
+                                `اکانت «${u.name}» (${u.phone}) حذف شود؟`
+                              )
+                            ) {
+                              return;
+                            }
+                            setUserBusy(true);
+                            setUserMsg(null);
+                            try {
+                              const res = await fetch(`/api/admin/users/${u.id}`, {
+                                method: "DELETE",
+                              });
+                              const data = await res.json();
+                              if (res.ok && data.ok) {
+                                setUsers(data.users);
+                                setUserMsg({
+                                  type: "ok",
+                                  text: `اکانت «${u.name}» حذف شد.`,
+                                });
+                              } else {
+                                setUserMsg({
+                                  type: "err",
+                                  text: data.error || "خطا در حذف اکانت",
+                                });
+                              }
+                            } finally {
+                              setUserBusy(false);
+                            }
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-[11px] font-semibold text-rose-700 cursor-pointer"
+                        >
+                          حذف
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {currentUser.role === "ADMIN" && (
+        <div className="rounded-2xl bg-rose-50/70 border border-rose-200 p-5 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="font-bold text-rose-900 text-sm flex items-center gap-2">
@@ -428,9 +770,15 @@ export function SettingsClient({
                     type: "ok",
                     text: data.message || "دیتابیس با موفقیت خام شد.",
                   });
-                  const cfgRes = await fetch("/api/config").then((r) => r.json());
+                  const [cfgRes, usersRes] = await Promise.all([
+                    fetch("/api/config").then((r) => r.json()),
+                    fetch("/api/admin/users").then((r) => r.json()),
+                  ]);
                   if (cfgRes.ok && cfgRes.config) {
                     setCfg(cfgRes.config);
+                  }
+                  if (usersRes.ok && usersRes.users) {
+                    setUsers(usersRes.users);
                   }
                 }
               } finally {
@@ -456,6 +804,7 @@ export function SettingsClient({
           </div>
         )}
       </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="rounded-2xl bg-white border border-slate-200 p-5 space-y-2.5">
