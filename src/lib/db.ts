@@ -552,6 +552,108 @@ async function initializeSchema(db: DbClient): Promise<void> {
   }
 }
 
+async function insertCleanBaseline(
+  tx: DbClient,
+  nowIso: string,
+  options: { seedAdmin: boolean }
+): Promise<void> {
+  if (options.seedAdmin) {
+    const adminHash = hashPassword("admin1234");
+    await tx.run(
+      `
+      INSERT INTO users (name, phone, email, company_name, city, role, password_hash, is_active, created_at)
+      VALUES (?, ?, ?, ?, ?, 'ADMIN', ?, 1, ?)
+      `,
+      "مدیر سیستم",
+      "09120000001",
+      "admin@petronabz.ir",
+      "پترونبض",
+      "تهران",
+      adminHash,
+      nowIso
+    );
+  }
+
+  await tx.run("DELETE FROM market_config WHERE id = 1");
+  await tx.run(
+    `
+    INSERT INTO market_config (
+      id, usd_to_toman, aed_to_toman, diesel_density, gasoline_density, default_barrel_liters,
+      empty_barrel_cost_toman, filling_cost_toman, vat_percent, target_margin_percent,
+      fixed_profit_per_barrel_toman, published_diesel_barrel_toman, published_gasoline_barrel_toman,
+      company_title, company_phone, company_address, company_economic_code, updated_at
+    ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    68500,
+    18650,
+    0.835,
+    0.745,
+    220,
+    0,
+    0,
+    0,
+    0,
+    500000,
+    0,
+    0,
+    "پترونبض",
+    "",
+    "",
+    "",
+    nowIso
+  );
+
+  const whMain = (
+    await tx.run(
+      `
+      INSERT INTO warehouses (name, city, address, empty_barrels, manager_name, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      `,
+      "انبار اصلی",
+      "انبار مرکزی",
+      "",
+      0,
+      "",
+      nowIso
+    )
+  ).lastInsertRowid;
+
+  const insertProductSql = `
+    INSERT INTO products (
+      name, sku, fuel_type, barrel_type, barrel_liters, density, warehouse_id,
+      stock_barrels, reserved_barrels, pricing_mode, margin_percent,
+      last_cost_per_barrel_toman, manual_price_per_barrel_toman, min_order_barrels,
+      is_active, description, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 0, 0, 0, 1, 1, '', ?)
+  `;
+
+  await tx.run(
+    insertProductSql,
+    "گازوئیل بشکه‌ای (۲۲۰ لیتری)",
+    "DSL-220",
+    "DIESEL",
+    "بشکه ۲۲۰ لیتری",
+    220,
+    0.835,
+    whMain,
+    "AUTO_DISCOVERY",
+    nowIso
+  );
+
+  await tx.run(
+    insertProductSql,
+    "بنزین ۷۰ لیتری",
+    "GAS-70L",
+    "GASOLINE",
+    "گالن / بشکه ۷۰ لیتری",
+    70,
+    0.745,
+    whMain,
+    "MANUAL",
+    nowIso
+  );
+}
+
 async function seedDatabaseIfEmpty(db: DbClient): Promise<void> {
   const existing = await db.get<{ cnt: number | string }>(
     "SELECT COUNT(*) AS cnt FROM users"
@@ -568,429 +670,50 @@ async function seedDatabaseIfEmpty(db: DbClient): Promise<void> {
     );
     if (Number(userCountRow?.cnt ?? 0) > 0) return;
 
-    const now = new Date();
-    const iso = (daysAgo = 0, hoursAgo = 0) =>
-      new Date(
-        now.getTime() - daysAgo * 86_400_000 - hoursAgo * 3_600_000
-      ).toISOString();
+    await insertCleanBaseline(tx, new Date().toISOString(), { seedAdmin: true });
+  });
+}
 
-    // 1. Seed Staff & Sample Counterparties (no public signup)
-    const insertUserSql = `
-      INSERT INTO users (name, phone, email, company_name, city, role, password_hash, is_active, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
-    `;
-    const adminHash = hashPassword("admin1234");
-    const salesHash = hashPassword("sales1234");
-    const customerHash = hashPassword("client1234");
+/**
+ * Clears all sample/operational transactions, quotes, sources, logs, and non-admin
+ * accounts while restoring a blank warehouse/product baseline.
+ */
+export async function resetToCleanDatabase(options?: {
+  keepAdmins?: boolean;
+}): Promise<void> {
+  const keepAdmins = options?.keepAdmins ?? true;
+  const db = await getDb();
+  const nowIso = new Date().toISOString();
 
-    await tx.run(
-      insertUserSql,
-      "مدیر سیستم",
-      "09120000001",
-      "admin@petronabz.ir",
-      "دفتر خرید و فروش سوخت",
-      "تهران",
-      "ADMIN",
-      adminHash,
-      iso(30)
-    );
-    await tx.run(
-      insertUserSql,
-      "همکار فروش و استعلام",
-      "09120000002",
-      "sales@petronabz.ir",
-      "دفتر خرید و فروش سوخت",
-      "تهران",
-      "SALES",
-      salesHash,
-      iso(25)
-    );
-    const cust1 = await tx.run(
-      insertUserSql,
-      "حسین بلوچی (خریدار دائمی)",
-      "09151112233",
-      "",
-      "ناوگان حمل بار",
-      "زاهدان",
-      "CUSTOMER",
-      customerHash,
-      iso(20)
-    );
-    const cust2 = await tx.run(
-      insertUserSql,
-      "محمد ریگی (خریدار)",
-      "09153334455",
-      "",
-      "پیمانکاری راه",
-      "چابهار",
-      "CUSTOMER",
-      customerHash,
-      iso(12)
-    );
+  await db.transaction(async (tx) => {
+    await tx.exec(`
+      DELETE FROM order_items;
+      DELETE FROM orders;
+      DELETE FROM sms_logs;
+      DELETE FROM price_quotes;
+      DELETE FROM price_history;
+      DELETE FROM price_sources;
+      DELETE FROM products;
+      DELETE FROM warehouses;
+    `);
 
-    // 2. Seed Market Config matching real trading numbers:
-    // Diesel barrel ~ 37,000,000 buy -> 37,500,000 sell (+500,000 Toman/barrel)
-    // Gasoline 70L ~ 8,000,000 buy -> 9,000,000 sell
-    await tx.run(
-      `
-      INSERT INTO market_config (
-        id, usd_to_toman, aed_to_toman, diesel_density, gasoline_density, default_barrel_liters,
-        empty_barrel_cost_toman, filling_cost_toman, vat_percent, target_margin_percent,
-        fixed_profit_per_barrel_toman, published_diesel_barrel_toman, published_gasoline_barrel_toman,
-        company_title, company_phone, company_address, company_economic_code, updated_at
-      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      68500,
-      18650,
-      0.835,
-      0.745,
-      220,
-      0,
-      0,
-      0,
-      1.5,
-      500000,
-      37500000,
-      9000000,
-      "بازرگانی خرید و فروش بنزین و گازوئیل",
-      "۰۹۱۲۰۰۰۰۰۰۱",
-      "محل تخلیه و بارگیری انبار مرکزی",
-      "",
-      iso(0, 1)
-    );
-
-    // 3. Seed Brokers (تماس تلفنی) & WhatsApp Channels (کانال واتساپ) for Diesel
-    const insertSourceSql = `
-      INSERT INTO price_sources (
-        name, code, type, city, contact_info, api_url, confidence_weight,
-        default_freight_per_barrel_toman, is_active, is_sms_target, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-    `;
-
-    const bAli = (
-      await tx.run(
-        insertSourceSql,
-        "دلال علی محمدی (تلفنی)",
-        "BRK-ALI",
-        "BROKER_PHONE",
-        "انبار شرق",
-        "۰۹۱۵۱۱۱۲۲۳۳",
-        "",
-        92,
-        0,
-        1,
-        iso(30)
-      )
-    ).lastInsertRowid;
-
-    const waSouth = (
-      await tx.run(
-        insertSourceSql,
-        "کانال واتساپ نرخ لحظه‌ای گازوئیل",
-        "WA-DIESEL-1",
-        "WHATSAPP",
-        "گروه واتساپ",
-        "پیام کانال واتساپ",
-        "",
-        90,
-        0,
-        0,
-        iso(25)
-      )
-    ).lastInsertRowid;
-
-    const bKarimi = (
-      await tx.run(
-        insertSourceSql,
-        "حاج حسین کریمی (استعلام تلفنی)",
-        "BRK-KARIMI",
-        "BROKER_PHONE",
-        "مسیر بندر",
-        "۰۹۱۷۲۲۲۴۴۵۵",
-        "",
-        88,
-        0,
-        1,
-        iso(20)
-      )
-    ).lastInsertRowid;
-
-    const waBorder = (
-      await tx.run(
-        insertSourceSql,
-        "گروه واتساپ بنکداران سوخت",
-        "WA-BONAKDAR",
-        "WHATSAPP",
-        "واتساپ",
-        "کانال عمده‌فروشان",
-        "",
-        85,
-        0,
-        0,
-        iso(15)
-      )
-    ).lastInsertRowid;
-
-    const bReza = (
-      await tx.run(
-        insertSourceSql,
-        "آقای رضا نارویی (تلفنی)",
-        "BRK-REZA",
-        "BROKER_PHONE",
-        "انبار مرزی",
-        "۰۹۱۵۷۷۷۸۸۹۹",
-        "",
-        82,
-        0,
-        1,
-        iso(10)
-      )
-    ).lastInsertRowid;
-
-    // 4. Seed Multi-Broker / WhatsApp Diesel Quotes around 36.8M - 37.4M per barrel
-    const insertQuoteSql = `
-      INSERT INTO price_quotes (
-        source_id, fuel_type, raw_price, currency, unit, barrel_liters, density,
-        includes_barrel, freight_per_barrel_toman, available_barrels, notes, recorded_by, recorded_at
-      ) VALUES (?, 'DIESEL', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    await tx.run(insertQuoteSql, bAli, 36800000, "TOMAN", "BARREL", 220, 0.835, 1, 0, 18, "تماس تلفنی صبح - تحویل با بشکه", "مدیر سیستم", iso(0, 3));
-    await tx.run(insertQuoteSql, waSouth, 37000000, "TOMAN", "BARREL", 220, 0.835, 1, 0, 30, "قیمت اعلامی کانال واتساپ ساعت ۱۱", "همکار فروش", iso(0, 2));
-    await tx.run(insertQuoteSql, bKarimi, 37150000, "TOMAN", "BARREL", 220, 0.835, 1, 0, 12, "تماس تلفنی - تسویه نقدی پای ماشین", "مدیر سیستم", iso(0, 2));
-    await tx.run(insertQuoteSql, waBorder, 37350000, "TOMAN", "BARREL", 220, 0.835, 1, 0, 25, "گروه واتساپ بنکداران - کرایه با خریدار", "همکار فروش", iso(0, 1));
-    await tx.run(insertQuoteSql, bReza, 37450000, "TOMAN", "BARREL", 220, 0.835, 1, 0, 10, "پیشنهاد تلفنی عصر", "مدیر سیستم", iso(0, 1));
-
-    // 5. Seed 7-day Diesel Price Discovery History
-    const insertHistorySql = `
-      INSERT INTO price_history (
-        weighted_avg_barrel_toman, best_buy_barrel_toman,
-        published_sell_barrel_toman, usd_to_toman, source_count, recorded_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `;
-    for (let d = 6; d >= 0; d--) {
-      const wave = Math.round(Math.sin(d * 0.9) * 250000);
-      const best = 36650000 + (6 - d) * 40000 + wave;
-      const avg = best + 280000;
-      const pub = best + 500000;
-      await tx.run(insertHistorySql, avg, best, pub, 68200 + (6 - d) * 50, 5, iso(d));
+    if (keepAdmins) {
+      await tx.exec("DELETE FROM users WHERE role != 'ADMIN';");
+    } else {
+      await tx.exec("DELETE FROM users;");
     }
 
-    // 6. Seed Warehouse
-    const whMain = (
-      await tx.run(
-        `
-        INSERT INTO warehouses (name, city, address, empty_barrels, manager_name, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        `,
-        "انبار و جایگاه مرکزی",
-        "انبار اصلی",
-        "محل نگهداری بشکه‌های گازوئیل و گالن‌های ۷۰ لیتری بنزین",
-        65,
-        "مدیر انبار",
-        iso(30)
-      )
-    ).lastInsertRowid;
+    const adminRow = await tx.get<{ cnt: number | string }>(
+      "SELECT COUNT(*) AS cnt FROM users WHERE role = 'ADMIN'"
+    );
+    const seedAdmin = Number(adminRow?.cnt ?? 0) === 0;
 
-    // 7. Seed Exact Products matching user example:
-    // - گازوئیل بشکه ۲۲۰ لیتری (خرید ۳۷ میلیون -> فروش ۳۷.۵ میلیون)
-    // - بنزین ۷۰ لیتری (خرید ۸ میلیون -> فروش ۹ میلیون)
-    const insertProductSql = `
-      INSERT INTO products (
-        name, sku, fuel_type, barrel_type, barrel_liters, density, warehouse_id,
-        stock_barrels, reserved_barrels, pricing_mode, margin_percent,
-        last_cost_per_barrel_toman, manual_price_per_barrel_toman, min_order_barrels,
-        is_active, description, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?)
-    `;
+    await tx.run(
+      "UPDATE sms_config SET is_enabled = 0, last_run_at = '', next_run_at = '', updated_at = ? WHERE id = 1",
+      nowIso
+    );
 
-    const pDiesel = (
-      await tx.run(
-        insertProductSql,
-        "گازوئیل بشکه‌ای (۲۲۰ لیتری)",
-        "DSL-220",
-        "DIESEL",
-        "بشکه ۲۲۰ لیتری",
-        220,
-        0.835,
-        whMain,
-        24,
-        0,
-        "AUTO_DISCOVERY",
-        0,
-        37000000,
-        37500000,
-        "خرید مرجع حدود ۳۷ میلیون و قیمت فروش روز کشف‌شده ۳۷.۵ میلیون تومان.",
-        iso(0, 1)
-      )
-    ).lastInsertRowid;
-
-    const pGasoline70 = (
-      await tx.run(
-        insertProductSql,
-        "بنزین ۷۰ لیتری",
-        "GAS-70L",
-        "GASOLINE",
-        "گالن / بشکه ۷۰ لیتری",
-        70,
-        0.745,
-        whMain,
-        35,
-        0,
-        "MANUAL",
-        0,
-        8000000,
-        9000000,
-        "بنزین ۷۰ لیتری — نمونه خرید ۸ میلیون و فروش ۹ میلیون تومان (سود ۱ میلیون روی هر ۷۰ لیتری).",
-        iso(0, 1)
-      )
-    ).lastInsertRowid;
-
-    // 8. Seed Sample Trades matching exact user example!
-    const insertOrderSql = `
-      INSERT INTO orders (
-        order_number, trade_type, customer_id, customer_name, customer_phone, customer_company,
-        destination_city, delivery_address, status, payment_status, payment_method,
-        subtotal_toman, freight_toman, discount_toman, vat_toman, total_toman,
-        usd_rate_snapshot, estimated_cost_toman, estimated_profit_toman,
-        driver_plate, waybill_number, notes, created_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const insertItemSql = `
-      INSERT INTO order_items (
-        order_id, product_id, product_name, fuel_type, barrel_liters, density,
-        quantity_barrels, total_liters, total_tons, unit_price_barrel_toman, line_total_toman
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
-    const oBuyD = (
-      await tx.run(
-        insertOrderSql,
-        "PO-1405-1001",
-        "PURCHASE",
-        null,
-        "دلال علی محمدی (تلفنی)",
-        "09151112233",
-        "استعلام تلفنی",
-        "انبار اصلی",
-        "تحویل درب انبار",
-        "DELIVERED",
-        "PAID",
-        "نقدی / کارت به کارت",
-        37000000,
-        0,
-        0,
-        0,
-        37000000,
-        68500,
-        37000000,
-        0,
-        "",
-        "IN-101",
-        "خرید ۱ بشکه گازوئیل به قیمت ۳۷ میلیون تومان",
-        "مدیر سیستم",
-        iso(1, 4),
-        iso(1, 4)
-      )
-    ).lastInsertRowid;
-    await tx.run(insertItemSql, oBuyD, pDiesel, "گازوئیل بشکه‌ای (۲۲۰ لیتری)", "DIESEL", 220, 0.835, 1, 220, 0.184, 37000000, 37000000);
-
-    const oSellD = (
-      await tx.run(
-        insertOrderSql,
-        "PN-1405-1002",
-        "SALE",
-        cust1.lastInsertRowid,
-        "حسین بلوچی (خریدار دائمی)",
-        "09151112233",
-        "ناوگان حمل بار",
-        "زاهدان",
-        "تحویل حضوری",
-        "DELIVERED",
-        "PAID",
-        "کارت به کارت",
-        37500000,
-        0,
-        0,
-        0,
-        37500000,
-        68500,
-        37000000,
-        500000,
-        "",
-        "OUT-201",
-        "فروش ۱ بشکه گازوئیل به قیمت ۳۷,۵۰۰,۰۰۰ تومان (سود ۵۰۰ هزار تومان)",
-        "مدیر سیستم",
-        iso(1, 1),
-        iso(1, 1)
-      )
-    ).lastInsertRowid;
-    await tx.run(insertItemSql, oSellD, pDiesel, "گازوئیل بشکه‌ای (۲۲۰ لیتری)", "DIESEL", 220, 0.835, 1, 220, 0.184, 37500000, 37500000);
-
-    const oBuyG = (
-      await tx.run(
-        insertOrderSql,
-        "PO-1405-1003",
-        "PURCHASE",
-        null,
-        "حاج حسین کریمی",
-        "09172224455",
-        "تامین بنزین",
-        "انبار اصلی",
-        "تحویل انبار",
-        "DELIVERED",
-        "PAID",
-        "نقدی",
-        8000000,
-        0,
-        0,
-        0,
-        8000000,
-        68500,
-        8000000,
-        0,
-        "",
-        "IN-102",
-        "خرید بنزین ۷۰ لیتری به قیمت ۸ میلیون تومان",
-        "مدیر سیستم",
-        iso(0, 6),
-        iso(0, 6)
-      )
-    ).lastInsertRowid;
-    await tx.run(insertItemSql, oBuyG, pGasoline70, "بنزین ۷۰ لیتری", "GASOLINE", 70, 0.745, 1, 70, 0.052, 8000000, 8000000);
-
-    const oSellG = (
-      await tx.run(
-        insertOrderSql,
-        "PN-1405-1004",
-        "SALE",
-        cust2.lastInsertRowid,
-        "محمد ریگی (خریدار)",
-        "09153334455",
-        "پیمانکاری راه",
-        "چابهار",
-        "تحویل حضوری",
-        "DELIVERED",
-        "PAID",
-        "نقدی",
-        9000000,
-        0,
-        0,
-        0,
-        9000000,
-        68500,
-        8000000,
-        1000000,
-        "",
-        "OUT-202",
-        "فروش بنزین ۷۰ لیتری به قیمت ۹ میلیون تومان (سود ۱ میلیون تومان)",
-        "مدیر سیستم",
-        iso(0, 2),
-        iso(0, 2)
-      )
-    ).lastInsertRowid;
-    await tx.run(insertItemSql, oSellG, pGasoline70, "بنزین ۷۰ لیتری", "GASOLINE", 70, 0.745, 1, 70, 0.052, 9000000, 9000000);
+    await insertCleanBaseline(tx, nowIso, { seedAdmin });
   });
 }
 

@@ -255,6 +255,11 @@ export function DashboardClient({
           </div>
 
           <div className="space-y-2.5">
+            {orders.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400">
+                هنوز هیچ معامله خرید یا فروشی ثبت نشده است.
+              </div>
+            )}
             {orders.slice(0, 6).map((order) => (
               <div
                 key={order.id}

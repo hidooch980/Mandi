@@ -8,6 +8,7 @@ import {
   Laptop,
   Settings,
   Smartphone,
+  Trash2,
 } from "lucide-react";
 import { SAMPLE_IMPORT_CSV } from "@/lib/csv-importer";
 import type { MarketConfig } from "@/lib/types";
@@ -25,6 +26,10 @@ export function SettingsClient({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [pwdBusy, setPwdBusy] = useState(false);
   const [pwdMsg, setPwdMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
+    null
+  );
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetMsg, setResetMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
     null
   );
   const [appVersion, setAppVersion] = useState<{
@@ -386,6 +391,71 @@ export function SettingsClient({
           </button>
         </div>
       </form>
+
+      <div className="rounded-2xl bg-rose-50/70 border border-rose-200 p-5 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-rose-900 text-sm flex items-center gap-2">
+              <Trash2 className="w-4 h-4 text-rose-600" />
+              <span>پاکسازی کامل و تبدیل به دیتابیس خام</span>
+            </h2>
+            <p className="text-xs text-rose-800/90 mt-1 leading-5">
+              تمام معاملات خرید و فروش، استعلام‌ها، تاریخچه قیمت، پیامک‌ها، لیست فروشندگان و خریداران نمونه پاک شده و موجودی انبار صفر می‌شود. (حساب مدیر و رمز عبور فعلی شما حفظ می‌ماند.)
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={resetBusy}
+            onClick={async () => {
+              const confirmed = window.confirm(
+                "آیا مطمئن هستید؟ تمام داده‌های فعلی (معاملات، استعلام‌ها، دلال‌ها، خریداران و موجودی انبار) پاک شده و دیتابیس کاملاً خام می‌شود."
+              );
+              if (!confirmed) return;
+              setResetBusy(true);
+              setResetMsg(null);
+              try {
+                const res = await fetch("/api/admin/reset-clean", {
+                  method: "POST",
+                });
+                const data = await res.json();
+                if (!res.ok || !data.ok) {
+                  setResetMsg({
+                    type: "err",
+                    text: data.error || "خطا در پاکسازی دیتابیس",
+                  });
+                } else {
+                  setResetMsg({
+                    type: "ok",
+                    text: data.message || "دیتابیس با موفقیت خام شد.",
+                  });
+                  const cfgRes = await fetch("/api/config").then((r) => r.json());
+                  if (cfgRes.ok && cfgRes.config) {
+                    setCfg(cfgRes.config);
+                  }
+                }
+              } finally {
+                setResetBusy(false);
+              }
+            }}
+            className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-1.5 shrink-0 cursor-pointer self-start sm:self-auto"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>{resetBusy ? "در حال پاکسازی..." : "پاکسازی کامل و خام‌سازی"}</span>
+          </button>
+        </div>
+
+        {resetMsg && (
+          <div
+            className={`rounded-xl border px-3.5 py-2.5 text-xs font-semibold ${
+              resetMsg.type === "ok"
+                ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                : "bg-white border-rose-300 text-rose-700"
+            }`}
+          >
+            {resetMsg.text}
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="rounded-2xl bg-white border border-slate-200 p-5 space-y-2.5">

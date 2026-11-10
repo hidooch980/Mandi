@@ -51,7 +51,7 @@ test("convertSqlToPg translates ? placeholders cleanly without touching string l
   );
 });
 
-test("SQLite db initializes 37M/37.5M Diesel, 8M/9M 70L Gasoline, and broker/WhatsApp sources", async () => {
+test("SQLite db initializes blank production baseline with 0 sample trades/quotes and resetToCleanDatabase clears everything cleanly", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "petronabz-test-"));
   const tempDb = path.join(tempDir, "test.db");
   process.env.PETRONABZ_DB_PATH = tempDb;
@@ -60,47 +60,61 @@ test("SQLite db initializes 37M/37.5M Diesel, 8M/9M 70L Gasoline, and broker/Wha
     getDb,
     getMarketConfig,
     listBuyersWithStats,
+    listLatestPriceQuotes,
     listOrders,
+    listPriceHistory,
     listPriceSources,
     listSellersWithStats,
+    resetToCleanDatabase,
   } = await import("../src/lib/db.ts");
   const { getDieselDiscoverySummary, listProductsWithPricing } = await import(
     "../src/lib/services.ts"
   );
 
   const config = await getMarketConfig();
-  assert.equal(config.publishedDieselBarrelToman, 37500000);
-  assert.equal(config.publishedGasolineBarrelToman, 9000000);
+  assert.equal(config.publishedDieselBarrelToman, 0);
+  assert.equal(config.publishedGasolineBarrelToman, 0);
 
   const sources = await listPriceSources();
-  assert.ok(sources.some((s) => s.type === "BROKER_PHONE"));
-  assert.ok(sources.some((s) => s.type === "WHATSAPP"));
+  assert.equal(sources.length, 0);
 
   const summary = await getDieselDiscoverySummary();
   assert.equal(summary.fuelType, "DIESEL");
-  assert.ok(summary.quoteCount >= 5);
-  assert.ok(summary.bestBuy !== null);
+  assert.equal(summary.quoteCount, 0);
+  assert.equal(summary.bestBuy, null);
 
   const products = await listProductsWithPricing(true);
-  const gas70 = products.find((p) => p.fuelType === "GASOLINE");
-  assert.ok(gas70);
-  assert.equal(gas70.barrelLiters, 70);
-  assert.equal(gas70.lastCostPerBarrelToman, 8000000);
-  assert.equal(gas70.effectivePricePerBarrelToman, 9000000);
+  assert.equal(products.length, 2);
+  assert.equal(products.every((p) => p.stockBarrels === 0), true);
 
   const orders = await listOrders();
-  assert.ok(orders.some((o) => o.tradeType === "SALE" && o.estimatedProfitToman === 500000));
-  assert.ok(orders.some((o) => o.tradeType === "SALE" && o.estimatedProfitToman === 1000000));
+  assert.equal(orders.length, 0);
 
   const buyers = await listBuyersWithStats();
-  assert.ok(buyers.length >= 2);
-  assert.ok(buyers.some((b) => b.totalSpentToman === 37500000));
+  assert.equal(buyers.length, 0);
 
   const sellers = await listSellersWithStats();
-  assert.ok(sellers.length >= 5);
-  assert.ok(sellers.some((s) => s.totalPurchasedToman >= 37000000));
+  assert.equal(sellers.length, 0);
 
+  // Insert sample data then verify resetToCleanDatabase wipes it while keeping admin
   const db = await getDb();
+  await db.run(
+    `INSERT INTO price_sources (name, code, type, city, contact_info, api_url, confidence_weight, default_freight_per_barrel_toman, is_active, is_sms_target, created_at)
+     VALUES ('فروشنده تستی', 'TST-1', 'BROKER_PHONE', 'تهران', '09121111111', '', 90, 0, 1, 1, ?)`,
+    new Date().toISOString()
+  );
+  assert.equal((await listPriceSources()).length, 1);
+
+  await resetToCleanDatabase({ keepAdmins: true });
+  assert.equal((await listPriceSources()).length, 0);
+  assert.equal((await listLatestPriceQuotes(true)).length, 0);
+  assert.equal((await listPriceHistory(10)).length, 0);
+  assert.equal((await listOrders()).length, 0);
+  const adminCount = await db.get<{ cnt: number }>(
+    "SELECT COUNT(*) AS cnt FROM users WHERE role = 'ADMIN'"
+  );
+  assert.equal(Number(adminCount?.cnt ?? 0), 1);
+
   await db.close();
   fs.rmSync(tempDir, { recursive: true, force: true });
 });

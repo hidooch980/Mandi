@@ -19,13 +19,27 @@ test("hourly SMS dispatch queues inquiries for selected targets and inbound repl
   assert.equal(smsCfg.intervalMinutes, 60);
   assert.ok(smsCfg.gatewaySecret.length >= 12);
 
+  // Clean DB starts with 0 sources; register a targeted broker source first
+  const db = await getDb();
+  await db.run(
+    `INSERT INTO price_sources (
+      name, code, type, city, contact_info, api_url, confidence_weight,
+      default_freight_per_barrel_toman, is_active, is_sms_target, created_at
+    ) VALUES (?, ?, 'BROKER_PHONE', ?, ?, '', 92, 0, 1, 1, ?)`,
+    "دلال علی محمدی (تلفنی)",
+    "BRK-ALI",
+    "انبار شرق",
+    "09151112233",
+    new Date().toISOString()
+  );
+
   // Dispatch hourly SMS batch for targeted brokers
   const dispatchResult = await dispatchHourlySmsInquiries({ force: true });
   assert.equal(dispatchResult.ran, true);
-  assert.equal(dispatchResult.queuedCount, 3);
+  assert.equal(dispatchResult.queuedCount, 1);
 
   const outboundLogs = await listSmsLogs(10);
-  assert.equal(outboundLogs.length, 3);
+  assert.equal(outboundLogs.length, 1);
   assert.equal(outboundLogs[0].direction, "OUTBOUND");
   assert.equal(outboundLogs[0].status, "QUEUED");
 
@@ -41,7 +55,6 @@ test("hourly SMS dispatch queues inquiries for selected targets and inbound repl
   assert.equal(replyOutcome.summary.bestBuy?.landedPerBarrelToman, 36700000);
 
   // Clean up test DB
-  const db = await getDb();
   await db.close();
   fs.rmSync(tempDir, { recursive: true, force: true });
 });

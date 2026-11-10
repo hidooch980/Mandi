@@ -42,7 +42,7 @@ export function OrdersClient({
   const [selectedProductId, setSelectedProductId] = useState<number>(
     activeProducts[0]?.id ?? 1
   );
-  const [quantityBarrels, setQuantityBarrels] = useState<number>(20);
+  const [quantityBarrels, setQuantityBarrels] = useState<number>(1);
   const [customUnitPrice, setCustomUnitPrice] = useState<string>("");
   const [receiveImmediately, setReceiveImmediately] = useState(true);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(
@@ -64,7 +64,7 @@ export function OrdersClient({
     customers[0]?.city ?? "تهران"
   );
   const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [freightToman, setFreightToman] = useState<number>(2500000);
+  const [freightToman, setFreightToman] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState("حواله بانکی ساتنا");
   const [notes, setNotes] = useState("");
 

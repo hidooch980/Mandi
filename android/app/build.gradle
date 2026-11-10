@@ -24,7 +24,7 @@ android {
         targetSdk 35
         versionCode((versionProps['VERSION_CODE'] ?: '1').toInteger())
         versionName(versionProps['VERSION_NAME'] ?: '1.0.0')
-        buildConfigField 'String', 'DEFAULT_SERVER_URL', '"http://192.168.100.60:3000"'
+        buildConfigField 'String', 'DEFAULT_SERVER_URL', '"https://mandi-oil-web.vercel.app"'
     }
 
     buildFeatures {

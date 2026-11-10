@@ -71,7 +71,9 @@ export function DiscoveryClient({
   const [showImportModal, setShowImportModal] = useState(false);
 
   // New Quote form (defaults tailored to broker phone / WhatsApp barrel quotes)
-  const [quoteMode, setQuoteMode] = useState<"EXISTING" | "NEW">("EXISTING");
+  const [quoteMode, setQuoteMode] = useState<"EXISTING" | "NEW">(
+    state.sources.length > 0 ? "EXISTING" : "NEW"
+  );
   const [qSourceId, setQSourceId] = useState<number>(state.sources[0]?.id ?? 1);
   const [qNewName, setQNewName] = useState("");
   const [qNewType, setQNewType] = useState<PriceSourceType>("BROKER_PHONE");

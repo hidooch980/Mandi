@@ -63,6 +63,11 @@ public class MainActivity extends Activity {
 
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         currentServerUrl = prefs.getString(KEY_SERVER_URL, BuildConfig.DEFAULT_SERVER_URL);
+        if (currentServerUrl == null || currentServerUrl.trim().isEmpty()
+                || "http://192.168.100.60:3000".equals(currentServerUrl)) {
+            currentServerUrl = BuildConfig.DEFAULT_SERVER_URL;
+            prefs.edit().putString(KEY_SERVER_URL, currentServerUrl).apply();
+        }
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.parseColor("#0F172A"));
@@ -294,16 +299,18 @@ public class MainActivity extends Activity {
         EditText input = new EditText(this);
         input.setInputType(InputType.TYPE_TEXT_VARIATION_URI);
         input.setText(currentServerUrl);
-        input.setHint("http://192.168.100.60:3000");
+        input.setHint("https://mandi-oil-web.vercel.app");
 
         new AlertDialog.Builder(this)
                 .setTitle("آدرس سرور برنامه")
-                .setMessage("آدرس وای‌فای کامپیوتر (http://192.168.x.x:3000) یا آدرس اینترنتی https را وارد کنید:")
+                .setMessage("آدرس اینترنتی سایت (https://...) یا آدرس وای‌فای را وارد کنید:")
                 .setView(input)
                 .setPositiveButton("ذخیره و اتصال", (d, w) -> {
                     String val = input.getText().toString().trim();
                     if (!val.startsWith("http://") && !val.startsWith("https://")) {
-                        val = "http://" + val;
+                        val = (val.startsWith("192.168.") || val.startsWith("10."))
+                                ? "http://" + val
+                                : "https://" + val;
                     }
                     if (val.endsWith("/")) {
                         val = val.substring(0, val.length() - 1);
@@ -325,7 +332,7 @@ public class MainActivity extends Activity {
     }
 
     private void showErrorState(String details) {
-        errorDetailsView.setText("لطفاً از روشن بودن سرور روی سیستم و اتصال به همان وای‌فای مطمئن شوید.\n" + details);
+        errorDetailsView.setText("خطا در اتصال به سرور. لطفاً اتصال اینترنت را بررسی کنید.\n" + details);
         errorOverlay.setVisibility(View.VISIBLE);
     }
 
