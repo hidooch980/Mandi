@@ -3,6 +3,7 @@ import { requireStaffUser } from "@/lib/api-helpers";
 import {
   getLedgerSummary,
   getMarketConfig,
+  listExpenses,
   listLatestPriceQuotes,
   listOrders,
   listPriceSources,
@@ -17,16 +18,25 @@ export async function GET() {
   const auth = await requireStaffUser();
   if (auth.response) return auth.response;
 
-  const [config, sources, latestDieselQuotes, warehouses, products, trades, ledger] =
-    await Promise.all([
-      getMarketConfig(),
-      listPriceSources(),
-      listLatestPriceQuotes(true),
-      listWarehouses(),
-      listProductsWithPricing(false),
-      listOrders(),
-      getLedgerSummary(),
-    ]);
+  const [
+    config,
+    sources,
+    latestDieselQuotes,
+    warehouses,
+    products,
+    trades,
+    ledger,
+    expenses,
+  ] = await Promise.all([
+    getMarketConfig(),
+    listPriceSources(),
+    listLatestPriceQuotes(true),
+    listWarehouses(),
+    listProductsWithPricing(false),
+    listOrders(),
+    getLedgerSummary(),
+    listExpenses(),
+  ]);
 
   const snapshot = {
     exportedAt: new Date().toISOString(),
@@ -37,6 +47,7 @@ export async function GET() {
     products,
     trades,
     ledger,
+    expenses,
   };
 
   return new NextResponse(JSON.stringify(snapshot, null, 2), {

@@ -8,6 +8,8 @@ import { hashPassword } from "./password.ts";
 import { normalizeIranPhone } from "./whatsapp-parser.ts";
 import type {
   BuyerSummary,
+  ExpenseCategory,
+  ExpenseRecord,
   FuelType,
   LedgerEntry,
   LedgerEntryType,
@@ -514,6 +516,17 @@ async function initializeSchema(db: DbClient): Promise<void> {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS expenses (
+      id ${pk},
+      title TEXT NOT NULL,
+      category TEXT NOT NULL CHECK(category IN ('FREIGHT','WAREHOUSE_RENT','SALARY','BARREL_PACKAGING','WASTAGE','OTHER')) DEFAULT 'OTHER',
+      amount_toman ${num} NOT NULL,
+      expense_date TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS order_items (
       id ${pk},
       order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -534,6 +547,7 @@ async function initializeSchema(db: DbClient): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_orders_trade_time ON orders(trade_type, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_sms_logs_time ON sms_logs(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_ledger_party_time ON ledger_entries(party_key, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date DESC, id DESC);
   `);
 
   // Safe migrations for existing SQLite and PostgreSQL databases
@@ -725,6 +739,7 @@ export async function resetToCleanDatabase(options?: {
 
   await db.transaction(async (tx) => {
     await tx.exec(`
+      DELETE FROM expenses;
       DELETE FROM ledger_entries;
       DELETE FROM order_items;
       DELETE FROM orders;
@@ -1358,4 +1373,55 @@ export async function deleteLedgerEntry(entryId: number): Promise<boolean> {
   });
 
   return deleted;
+}
+
+// ==========================================
+// Operating Expenses (هزینه‌های جاری و سود و زیان)
+// ==========================================
+
+export async function listExpenses(limit = 300): Promise<ExpenseRecord[]> {
+  const db = await getDb();
+  const rows = await db.all<Record<string, unknown>>(
+    "SELECT * FROM expenses ORDER BY expense_date DESC, id DESC LIMIT ?",
+    limit
+  );
+  return rows.map((r) => ({
+    id: Number(r.id),
+    title: String(r.title),
+    category: r.category as ExpenseCategory,
+    amountToman: Number(r.amount_toman),
+    expenseDate: String(r.expense_date),
+    note: String(r.note ?? ""),
+    createdBy: String(r.created_by ?? ""),
+    createdAt: String(r.created_at),
+  }));
+}
+
+export async function createExpense(params: {
+  title: string;
+  category: ExpenseCategory;
+  amountToman: number;
+  expenseDate: string;
+  note?: string;
+  createdBy: string;
+}): Promise<ExpenseRecord[]> {
+  const db = await getDb();
+  await db.run(
+    `INSERT INTO expenses (title, category, amount_toman, expense_date, note, created_by, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    params.title.trim(),
+    params.category,
+    Math.round(params.amountToman),
+    params.expenseDate.trim(),
+    (params.note ?? "").trim(),
+    params.createdBy,
+    new Date().toISOString()
+  );
+  return listExpenses();
+}
+
+export async function deleteExpense(id: number): Promise<boolean> {
+  const db = await getDb();
+  const res = await db.run("DELETE FROM expenses WHERE id = ?", id);
+  return res.changes > 0;
 }

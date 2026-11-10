@@ -7,6 +7,7 @@ import {
   Compass,
   FileText,
   Fuel,
+  PieChart,
   TrendingUp,
   Wallet,
 } from "lucide-react";
@@ -85,6 +86,13 @@ export function DashboardClient({
           >
             <FileText className="w-4 h-4" />
             <span>ثبت خرید / فروش</span>
+          </Link>
+          <Link
+            href="/reports"
+            className="px-4 py-2.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs sm:text-sm font-bold inline-flex items-center gap-2"
+          >
+            <PieChart className="w-4 h-4 text-sky-600" />
+            <span>گزارش سود و زیان</span>
           </Link>
         </div>
       </div>

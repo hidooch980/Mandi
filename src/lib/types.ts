@@ -323,3 +323,124 @@ export interface LedgerSummary {
   creditorCount: number;
   netPositionToman: number;
 }
+
+export type ExpenseCategory =
+  | "FREIGHT"
+  | "WAREHOUSE_RENT"
+  | "SALARY"
+  | "BARREL_PACKAGING"
+  | "WASTAGE"
+  | "OTHER";
+
+export interface ExpenseRecord {
+  id: number;
+  title: string;
+  category: ExpenseCategory;
+  amountToman: number;
+  expenseDate: string;
+  note: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface ExpenseCategoryBreakdown {
+  category: ExpenseCategory;
+  label: string;
+  amountToman: number;
+  count: number;
+}
+
+export interface FuelReportRow {
+  fuelType: FuelType;
+  label: string;
+  salesCount: number;
+  purchasesCount: number;
+  purchasedBarrels: number;
+  purchasedLiters: number;
+  purchasedTons: number;
+  purchasedAmountToman: number;
+  avgBuyPerBarrelToman: number;
+  soldBarrels: number;
+  soldLiters: number;
+  soldTons: number;
+  soldAmountToman: number;
+  avgSellPerBarrelToman: number;
+  grossProfitToman: number;
+  profitSharePercent: number;
+}
+
+export interface DailyReportRow {
+  dateKey: string;
+  jalaliLabel: string;
+  salesCount: number;
+  purchasesCount: number;
+  soldBarrels: number;
+  purchasedBarrels: number;
+  salesToman: number;
+  purchasesToman: number;
+  grossProfitToman: number;
+  expensesToman: number;
+  netProfitToman: number;
+}
+
+export interface PartyReportRow {
+  partyKey: string;
+  partyName: string;
+  partyPhone: string;
+  tradeCount: number;
+  barrels: number;
+  liters: number;
+  totalToman: number;
+  grossProfitToman: number;
+  netBalanceToman: number;
+}
+
+export interface CityReportRow {
+  city: string;
+  salesCount: number;
+  soldBarrels: number;
+  soldLiters: number;
+  totalSalesToman: number;
+  grossProfitToman: number;
+}
+
+export interface InventoryValuationRow {
+  productId: number;
+  name: string;
+  fuelType: FuelType;
+  stockBarrels: number;
+  reservedBarrels: number;
+  availableBarrels: number;
+  totalLiters: number;
+  costValuationToman: number;
+  retailValuationToman: number;
+  potentialProfitToman: number;
+}
+
+export interface ComprehensiveReport {
+  dateFrom: string;
+  dateTo: string;
+  pnl: {
+    salesCount: number;
+    purchasesCount: number;
+    totalSalesToman: number;
+    totalPurchasesToman: number;
+    totalCostOfGoodsToman: number;
+    totalFreightChargedToman: number;
+    totalDiscountToman: number;
+    grossProfitToman: number;
+    grossMarginPercent: number;
+    totalExpensesToman: number;
+    expensesByCategory: ExpenseCategoryBreakdown[];
+    netProfitToman: number;
+    netMarginPercent: number;
+  };
+  byFuel: FuelReportRow[];
+  daily: DailyReportRow[];
+  topBuyers: PartyReportRow[];
+  topSellers: PartyReportRow[];
+  byCity: CityReportRow[];
+  inventoryValuation: InventoryValuationRow[];
+  totalInventoryCostToman: number;
+  totalInventoryRetailToman: number;
+}

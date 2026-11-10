@@ -12,6 +12,7 @@ import {
   LogOut,
   Menu,
   MessageSquare,
+  PieChart,
   Settings,
   ShoppingBag,
   Users,
@@ -40,6 +41,7 @@ export function AppShell({ user, usdToToman, children }: AppShellProps) {
     { href: "/sms", label: "پیامک ساعتی", icon: MessageSquare },
     { href: "/orders", label: "خرید و فروش", icon: FileText },
     { href: "/ledger", label: "بدهکار و بستانکار", icon: Wallet },
+    { href: "/reports", label: "سود و زیان و گزارشات", icon: PieChart },
     { href: "/inventory", label: "انبار بنزین و گازوئیل", icon: Boxes },
     { href: "/customers", label: "فروشندگان و خریداران", icon: Users },
     { href: "/settings", label: "تنظیمات", icon: Settings },
@@ -53,10 +55,10 @@ export function AppShell({ user, usdToToman, children }: AppShellProps) {
   const mobileNav = isStaff
     ? [
         staffNav[0], // داشبورد
-        staffNav[1], // کشف قیمت
         staffNav[3], // خرید و فروش
         staffNav[4], // بدهکار و بستانکار
-        staffNav[7], // تنظیمات
+        staffNav[5], // سود و زیان و گزارشات
+        staffNav[8], // تنظیمات
       ]
     : customerNav;
 
