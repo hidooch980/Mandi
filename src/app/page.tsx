@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   CheckCircle2,
   Compass,
-  Download,
   Fuel,
   Laptop,
   ShieldCheck,
@@ -91,14 +90,6 @@ export default async function HomePage() {
                 <Compass className="w-4 h-4" />
                 <span>{user ? "ادامه در پنل کاربری" : "ورود به پنل مدیریت"}</span>
               </Link>
-              <a
-                href="/downloads/petronabz-latest.apk"
-                download="petronabz-latest.apk"
-                className="px-5 py-3 rounded-xl bg-slate-900 border border-slate-700 hover:border-amber-400 text-amber-300 font-bold text-sm flex items-center gap-2 transition"
-              >
-                <Download className="w-4 h-4" />
-                <span>دانلود APK اندروید (امضاشده)</span>
-              </a>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 text-xs text-slate-300">
@@ -112,7 +103,7 @@ export default async function HomePage() {
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>نصب وب‌اپ آیفون و اپلیکیشن اندروید</span>
+                <span>وب‌اپ (PWA) اندروید و آیفون</span>
               </div>
             </div>
           </div>
@@ -213,8 +204,8 @@ export default async function HomePage() {
             },
             {
               icon: Laptop,
-              title: "اپلیکیشن اندروید و وب‌اپ آیفون",
-              desc: "نسخه APK اختصاصی و قابل بروزرسانی برای اندروید، وب‌اپ برای Safari آیفون و نصب دسکتاپ روی کامپیوتر.",
+              title: "وب‌اپ اندروید و آیفون (PWA)",
+              desc: "نصب مستقیم به‌عنوان وب‌اپ روی صفحه اصلی گوشی‌های اندروید (Chrome) و آیفون (Safari) و دسکتاپ بدون نیاز به فایل نصبی جداگانه.",
             },
           ].map((feat) => {
             const Icon = feat.icon;

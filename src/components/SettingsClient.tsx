@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   DatabaseBackup,
   Download,
@@ -58,21 +58,6 @@ export function SettingsClient({
   const [userMsg, setUserMsg] = useState<{ type: "ok" | "err"; text: string } | null>(
     null
   );
-  const [appVersion, setAppVersion] = useState<{
-    versionCode: number;
-    versionName: string;
-    apkAvailable: boolean;
-    apkUrl: string;
-  } | null>(null);
-
-  useEffect(() => {
-    fetch("/api/app-version")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.ok) setAppVersion(d);
-      })
-      .catch(() => {});
-  }, []);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -819,31 +804,16 @@ export function SettingsClient({
           </p>
         </div>
 
-        <div className="rounded-2xl bg-white border border-slate-200 p-5 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 font-bold text-slate-900 text-sm">
-              <Smartphone className="w-5 h-5 text-amber-600" />
-              <span>اپلیکیشن اندروید (APK امضاشده) و وب‌اپ آیفون</span>
-            </div>
-            {appVersion && (
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
-                نسخه {appVersion.versionName}
-              </span>
-            )}
+        <div className="rounded-2xl bg-white border border-slate-200 p-5 space-y-2.5">
+          <div className="flex items-center gap-2 font-bold text-slate-900 text-sm">
+            <Smartphone className="w-5 h-5 text-amber-600" />
+            <span>نصب وب‌اپ روی موبایل (اندروید و آیفون — PWA)</span>
           </div>
           <p className="text-xs text-slate-600 leading-6">
-            <strong>اندروید:</strong> فایل نصبی امضاشده و قابل بروزرسانی را مستقیم دانلود و نصب کنید.
+            <strong>اندروید (Chrome):</strong> سایت را در کروم باز کرده، منوی سه‌نقطه بالا را بزنید و گزینه <strong>Install app / Add to Home screen</strong> را انتخاب کنید.
             <br />
-            <strong>آیفون (iOS Web App):</strong> در مرورگر <strong>Safari</strong> باز کرده، دکمه <strong>Share</strong> و سپس <strong>Add to Home Screen</strong> را بزنید.
+            <strong>آیفون (Safari):</strong> در مرورگر <strong>Safari</strong> باز کرده، دکمه <strong>Share</strong> و سپس <strong>Add to Home Screen</strong> را بزنید.
           </p>
-          <a
-            href={appVersion?.apkUrl || "/downloads/petronabz-latest.apk"}
-            download="petronabz-latest.apk"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold"
-          >
-            <Download className="w-4 h-4" />
-            دانلود فایل نصبی اندروید (APK امضاشده)
-          </a>
         </div>
       </div>
     </div>
