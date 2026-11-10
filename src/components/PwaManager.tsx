@@ -16,8 +16,11 @@ export function PwaManager() {
   const [showIosGuide, setShowIosGuide] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
+  const [offlineDismissed, setOfflineDismissed] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
@@ -37,15 +40,55 @@ export function PwaManager() {
     };
     window.addEventListener("beforeinstallprompt", handleBeforeInstall);
 
-    const updateOnline = () => setIsOffline(!navigator.onLine);
-    updateOnline();
-    window.addEventListener("online", updateOnline);
-    window.addEventListener("offline", updateOnline);
+    async function verifyRealOffline() {
+      // navigator.onLine frequently gives false negatives on Android WebView, iOS Safari, and VPNs
+      if (navigator.onLine) {
+        if (!cancelled) {
+          setIsOffline(false);
+          setOfflineDismissed(false);
+        }
+        return;
+      }
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch(`/api/health?ping=${Date.now()}`, {
+          method: "GET",
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        if (!cancelled) {
+          setIsOffline(!res.ok);
+          if (res.ok) setOfflineDismissed(false);
+        }
+      } catch {
+        if (!cancelled) setIsOffline(true);
+      }
+    }
+
+    const handleOnline = () => {
+      setIsOffline(false);
+      setOfflineDismissed(false);
+    };
+    const handleOffline = () => {
+      void verifyRealOffline();
+    };
+
+    if (!navigator.onLine) {
+      void verifyRealOffline();
+    }
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("focus", handleOffline);
 
     return () => {
+      cancelled = true;
       window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
-      window.removeEventListener("online", updateOnline);
-      window.removeEventListener("offline", updateOnline);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("focus", handleOffline);
     };
   }, []);
 
@@ -65,10 +108,18 @@ export function PwaManager() {
 
   return (
     <>
-      {isOffline && (
+      {isOffline && !offlineDismissed && (
         <div className="no-print fixed top-0 inset-x-0 z-50 bg-amber-600 text-white text-xs sm:text-sm py-2 px-4 flex items-center justify-center gap-2 shadow">
           <WifiOff className="w-4 h-4 shrink-0" />
-          <span>شما در حالت آفلاین هستید؛ داده‌های جدید پس از اتصال به اینترنت همگام می‌شوند.</span>
+          <span>ارتباط اینترنت برقرار نیست؛ پس از اتصال صفحه را رفرش کنید.</span>
+          <button
+            type="button"
+            onClick={() => setOfflineDismissed(true)}
+            aria-label="بستن"
+            className="p-1 rounded hover:bg-amber-700/60 cursor-pointer shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 

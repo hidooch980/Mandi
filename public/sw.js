@@ -1,4 +1,4 @@
-const CACHE_NAME = "petronabz-pwa-v1";
+const CACHE_NAME = "petronabz-pwa-v2";
 const SHELL_ASSETS = [
   "/",
   "/login",
