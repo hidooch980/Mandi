@@ -125,7 +125,7 @@ export default async function HomePage() {
               <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-4 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-bold text-emerald-400">
-                    گازوئیل بشکه‌ای ۲۲۰ لیتری ({formatNumberFa(dieselSummary.quoteCount)} استعلام)
+                    گازوئیل بشکه‌ای {formatNumberFa(config.defaultBarrelLiters)} لیتری ({formatNumberFa(dieselSummary.quoteCount)} استعلام)
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-xs">

@@ -28,8 +28,8 @@ export function InventoryClient({
   // Add Product form
   const [pName, setPName] = useState("");
   const [pFuelType, setPFuelType] = useState<FuelType>("DIESEL");
-  const [pBarrelType, setPBarrelType] = useState("بشکه فلزی نو ۲۲۰ لیتر");
-  const [pLiters, setPLiters] = useState("220");
+  const [pBarrelType, setPBarrelType] = useState("بشکه فلزی نو ۲۱۰ لیتر");
+  const [pLiters, setPLiters] = useState("210");
   const [pDensity, setPDensity] = useState("0.835");
   const [pWarehouseId, setPWarehouseId] = useState(
     String(initialWarehouses[0]?.id ?? 1)
@@ -208,7 +208,7 @@ export function InventoryClient({
         className="rounded-2xl bg-amber-50 border border-amber-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
       >
         <div className="text-xs sm:text-sm text-amber-950">
-          <strong>نرخ فروش روز بنزین بشکه‌ای (۲۲۰ لیتری):</strong>{" "}
+          <strong>نرخ فروش روز بنزین (۷۰ لیتری):</strong>{" "}
           <span className="text-amber-800 text-xs">
             (گازوئیل از موتور کشف قیمت چندنفره تغذیه می‌شود و نرخ بنزین از اینجا تنظیم می‌گردد)
           </span>
@@ -426,7 +426,7 @@ export function InventoryClient({
                   required
                   value={pName}
                   onChange={(e) => setPName(e.target.value)}
-                  placeholder="مثلاً بنزین بشکه فلزی ۲۲۰ لیتری"
+                  placeholder="مثلاً گازوئیل بشکه ۲۱۰ لیتری"
                   className="w-full rounded-xl border border-slate-300 px-3 py-2"
                 />
               </div>
@@ -438,6 +438,7 @@ export function InventoryClient({
                     const next = e.target.value as FuelType;
                     setPFuelType(next);
                     setPDensity(next === "GASOLINE" ? "0.745" : "0.835");
+                    setPLiters(next === "GASOLINE" ? "70" : "210");
                   }}
                   className="w-full rounded-xl border border-slate-300 px-3 py-2"
                 >

@@ -74,6 +74,7 @@ test("SQLite db initializes blank production baseline with 0 sample trades/quote
   const config = await getMarketConfig();
   assert.equal(config.publishedDieselBarrelToman, 0);
   assert.equal(config.publishedGasolineBarrelToman, 0);
+  assert.equal(config.defaultBarrelLiters, 210);
 
   const sources = await listPriceSources();
   assert.equal(sources.length, 0);
@@ -86,6 +87,7 @@ test("SQLite db initializes blank production baseline with 0 sample trades/quote
   const products = await listProductsWithPricing(true);
   assert.equal(products.length, 2);
   assert.equal(products.every((p) => p.stockBarrels === 0), true);
+  assert.equal(products.find((p) => p.fuelType === "DIESEL")?.barrelLiters, 210);
 
   const orders = await listOrders();
   assert.equal(orders.length, 0);

@@ -420,7 +420,7 @@ async function initializeSchema(db: DbClient): Promise<void> {
       raw_price ${num} NOT NULL,
       currency TEXT NOT NULL CHECK(currency IN ('TOMAN','USD','AED')),
       unit TEXT NOT NULL CHECK(unit IN ('LITER','BARREL','TON','KG')),
-      barrel_liters ${num} NOT NULL DEFAULT 220,
+      barrel_liters ${num} NOT NULL DEFAULT 210,
       density ${num} NOT NULL DEFAULT 0.835,
       includes_barrel INTEGER NOT NULL DEFAULT 1,
       freight_per_barrel_toman ${num} NOT NULL DEFAULT 0,
@@ -456,7 +456,7 @@ async function initializeSchema(db: DbClient): Promise<void> {
       sku TEXT NOT NULL UNIQUE,
       fuel_type TEXT NOT NULL CHECK(fuel_type IN ('DIESEL','GASOLINE')),
       barrel_type TEXT NOT NULL,
-      barrel_liters ${num} NOT NULL DEFAULT 220,
+      barrel_liters ${num} NOT NULL DEFAULT 210,
       density ${num} NOT NULL DEFAULT 0.835,
       warehouse_id INTEGER NOT NULL REFERENCES warehouses(id) ON DELETE RESTRICT,
       stock_barrels INTEGER NOT NULL DEFAULT 0,
@@ -583,6 +583,18 @@ async function initializeSchema(db: DbClient): Promise<void> {
     );
   }
 
+  // Upgrade default Diesel barrel capacity from 220L to 210L on existing databases
+  await db.exec(`
+    UPDATE market_config SET default_barrel_liters = 210 WHERE id = 1 AND default_barrel_liters = 220;
+    UPDATE products
+    SET sku = 'DSL-210',
+        name = 'گازوئیل بشکه‌ای (۲۱۰ لیتری)',
+        barrel_type = 'بشکه ۲۱۰ لیتری',
+        barrel_liters = 210
+    WHERE sku = 'DSL-220'
+      AND NOT EXISTS (SELECT 1 FROM products p2 WHERE p2.sku = 'DSL-210');
+  `);
+
   // Ensure sms_config row 1 exists safely across concurrent serverless cold starts
   const smsRow = await db.get("SELECT id FROM sms_config WHERE id = 1");
   if (!smsRow) {
@@ -640,7 +652,7 @@ async function insertCleanBaseline(
     18650,
     0.835,
     0.745,
-    220,
+    210,
     0,
     0,
     0,
@@ -681,11 +693,11 @@ async function insertCleanBaseline(
 
   await tx.run(
     insertProductSql,
-    "گازوئیل بشکه‌ای (۲۲۰ لیتری)",
-    "DSL-220",
+    "گازوئیل بشکه‌ای (۲۱۰ لیتری)",
+    "DSL-210",
     "DIESEL",
-    "بشکه ۲۲۰ لیتری",
-    220,
+    "بشکه ۲۱۰ لیتری",
+    210,
     0.835,
     whMain,
     "AUTO_DISCOVERY",

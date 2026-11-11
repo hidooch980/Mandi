@@ -116,7 +116,7 @@ export function DashboardClient({
 
         <div className="rounded-2xl bg-white p-5 border border-slate-200 shadow-xs space-y-2">
           <div className="flex items-center justify-between text-xs text-slate-500">
-            <span>نرخ فروش روز بشکه (۲۲۰ لیتری)</span>
+            <span>نرخ فروش روز (گازوئیل {formatNumberFa(config.defaultBarrelLiters)} / بنزین ۷۰ لیتری)</span>
             <TrendingUp className="w-4 h-4 text-amber-600" />
           </div>
           <div className="text-sm font-extrabold text-slate-900 tabular-nums space-y-1">
@@ -294,7 +294,7 @@ export function DashboardClient({
         <div className="lg:col-span-7 rounded-2xl bg-white border border-slate-200 p-5 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-bold text-slate-900 text-sm sm:text-base">
-              روند ۱۰ روزه کشف قیمت گازوئیل (بشکه ۲۲۰ لیتری)
+              روند ۱۰ روزه کشف قیمت گازوئیل (بشکه {formatNumberFa(config.defaultBarrelLiters)} لیتری)
             </h2>
             <Link
               href="/discovery"
